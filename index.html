@@ -256,7 +256,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
   <div class="dlg">
     <h3 id="setTitle">Settings</h3>
     <h2>Match a reference photo</h2>
-    <p class="fine">Add up to 3 car photos you like. Tap one to make it the target: a dashed outline in the live view shows where the car should sit to match it.</p>
+    <p class="fine">Add up to 3 car photos you like. Tap one to make it the target: every photo is then cropped so the car fills the frame the way it does in that photo.</p>
     <div class="refs" id="refs"><button class="btn small" type="button" id="refBtn">Add photo</button></div>
     <h2>Claude check</h2>
     <p class="fine">Optional. Paste your Claude API key to have Claude score each saved shot against listing-photo standards and your references. The key is kept only in this browser and is sent only to Anthropic. It is billed to your API account, not your Claude plan.</p>
@@ -267,6 +267,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
       <button class="btn small" type="button" id="keyDel">Remove key</button>
     </div>
     <p class="fine" id="keyMsg" role="status"></p>
+    <p class="fine" id="camInfo"></p>
     <button class="btn" type="button" id="setClose">Done</button>
   </div>
 </dialog>
@@ -341,7 +342,7 @@ function icon(kind){
 function store(k,v){try{if(v===undefined)return localStorage.getItem("csc_"+k);if(v===null)localStorage.removeItem("csc_"+k);else localStorage.setItem("csc_"+k,v)}catch(e){}return null}
 
 var S={shot:SHOTS[0],shape:"square",view:"square",vin:null,vinOk:false,vinInfo:"",auto:store("auto")!=="0",refs:[],refActive:-1,saved:{},kept:{},photo:null,params:{b:0,s:0,h:0,c:.05},autoP:null,before:false,advice:null,gen:0,ctl:null,raf:0,count:0};
-var L={on:false,stream:null,model:null,modelState:"idle",box:null,boxAt:0,G:null,roll:0,pitch:0,rot:0,light:null,lenses:[],lens:null,readySince:0,lastShot:0,paused:false,said:"",saidAt:0,note:null};
+var L={on:false,stream:null,model:null,modelState:"idle",box:null,boxAt:0,G:null,roll:0,pitch:0,rot:0,light:null,lenses:[],lens:null,readySince:0,lastShot:0,paused:false,said:"",saidAt:0,note:null,flat:false};
 var video=$("video"),isIOS=typeof DeviceMotionEvent!=="undefined"&&typeof DeviceMotionEvent.requestPermission==="function";
 
 /* ---------- setup screen ---------- */
@@ -495,7 +496,9 @@ function onMotion(e){
   var s=isIOS?-1:1,x=g.x*s,y=g.y*s,z=g.z*s;
   if(!L.G)L.G={x:x,y:y,z:z};else{L.G.x+=(x-L.G.x)*.2;L.G.y+=(y-L.G.y)*.2;L.G.z+=(z-L.G.z)*.2}
   var a=Math.atan2(L.G.x,L.G.y)*180/Math.PI,d=((a%90)+90)%90;if(d>45)d-=90;L.roll=d;
-  L.pitch=Math.atan2(L.G.z,Math.sqrt(L.G.x*L.G.x+L.G.y*L.G.y))*180/Math.PI;
+  var inPlane=Math.sqrt(L.G.x*L.G.x+L.G.y*L.G.y);
+  L.pitch=Math.atan2(L.G.z,inPlane)*180/Math.PI;
+  L.flat=inPlane<.5*Math.sqrt(inPlane*inPlane+L.G.z*L.G.z); /* aimed steeply up or down: roll cannot be trusted */
   var r=e.rotationRate;if(r&&r.alpha!==null){var mag=Math.sqrt(r.alpha*r.alpha+r.beta*r.beta+r.gamma*r.gamma);L.rot+=(mag-L.rot)*.25}
 }
 function askMotion(){
@@ -578,25 +581,22 @@ function guide(){
   if(!vw)return {kind:"dot",text:"Starting the camera",chips:chips,ready:false,tgt:null,zone:null};
   var z=zone(vw,vh),tgt=null;
   if(sh.manual){var mw=Math.min(.86,z.w*.94);tgt={w:mw,h:mw*vw/6/vh,cx:.5,cy:.5}}
+  var crop=null,mq=Math.min(vw,vh);
+  if(!sh.ext&&!sh.manual)crop={x:(vw-mq)/2,y:(vh-mq)/2,size:mq};
   if(sh.ext){
     if(L.modelState==="ready"){
-      var b=freshBox();tgt=target(z);
+      var b=freshBox();
       if(!b){chips.Frame="bad";say("dot","Point the camera at the whole car")}
       else{
-        var e=.006,cl=b.x<z.x+e,cr=b.x+b.w>z.x+z.w-e,ct=b.y<z.y+e,cb=b.y+b.h>z.y+z.h-e,ok=false,cx=b.x+b.w/2,cy=b.y+b.h/2;
-        if((cl&&cr)||(ct&&cb)||b.w>z.w*.97)say("back",hasLens("0.5x")&&L.lens==="1x"?"Step back. No room? Use 0.5x":"Step back until the car fits the bright area");
-        else if(cl)say("left","Aim left. The car is leaving the crop");
-        else if(cr)say("right","Aim right. The car is leaving the crop");
-        else if(ct)say("up","Aim up. The roof is leaving the crop");
-        else if(cb)say("down","Aim down. The wheels are leaving the crop");
-        else if(b.w<tgt.w*.84)say("closer",b.w<tgt.w*.5&&hasLens("Tele")&&L.lens!=="Tele"?"Step closer, or switch to Tele":"Step closer to fill the box");
-        else if(b.w>tgt.w*1.09)say("back","Step back a little");
-        else if(cx<tgt.cx-.07*z.w)say("left","Aim a little left");
-        else if(cx>tgt.cx+.07*z.w)say("right","Aim a little right");
-        else if(cy<tgt.cy-.1*z.h)say("up","Aim a little higher");
-        else if(cy>tgt.cy+.1*z.h)say("down","Aim a little lower");
+        var e=.012,cl=b.x<e,cr=b.x+b.w>1-e,ct=b.y<e,cb=b.y+b.h>1-e,ok=false,cp=cropFor(b,vw,vh,sh);
+        if((cl&&cr)||(ct&&cb)||cp.big)say("back",hasLens("0.5x")&&L.lens==="1x"?"Step back. No room? Use 0.5x":"Step back so there is space around the car");
+        else if(cl)say("left","Aim left. The car is cut off");
+        else if(cr)say("right","Aim right. The car is cut off");
+        else if(ct)say("up","Aim up. The roof is cut off");
+        else if(cb)say("down","Aim down. The wheels are cut off");
+        else if(cp.small)say("closer",hasLens("Tele")&&L.lens!=="Tele"?"Step closer, or switch to Tele":"Step closer. The car is too small for a sharp photo");
         else ok=true;
-        chips.Frame=ok?"ok":"bad";
+        chips.Frame=ok?"ok":"bad";crop=cp;
       }
     }
   }else if(sh.wide&&L.lens&&L.lens!=="0.5x"&&hasLens("0.5x"))say("lens","Switch to 0.5x to fit the whole cabin");
@@ -606,8 +606,8 @@ function guide(){
       else if(L.pitch<-8){chips.Height="bad";say("up","Raise the phone, then aim level")}
       else chips.Height="ok";
     }
-    if(sh.id!=="trunk"&&sh.id!=="rims"&&sh.id!=="odometer"&&!sh.manual){
-      chips.Level=Math.abs(L.roll)<=2?"ok":"bad";if(chips.Level==="bad")say("tilt","Level the phone");
+    if(!sh.manual&&!L.flat){
+      chips.Level=Math.abs(L.roll)<=6?"ok":"bad";if(chips.Level==="bad")say("tilt","Level the phone");
     }
   }
   var li=L.light;
@@ -623,17 +623,17 @@ function guide(){
     chips.Light=okL?"ok":"bad";
   }
   if(L.G){chips.Steady=L.rot<(sh.ext?12:7)?"ok":"bad";if(chips.Steady==="bad")say("dot","Hold still")}
-  if(out){out.chips=chips;out.ready=false;out.tgt=tgt;out.zone=z;return out}
+  if(out){out.chips=chips;out.ready=false;out.tgt=tgt;out.zone=z;out.crop=crop;return out}
   if(sh.manual)return {kind:"dot",text:"Fill the box with the VIN, then tap the shutter",chips:chips,ready:false,tgt:tgt,zone:z};
   var txt=sh.ext&&L.modelState==="loading"?"Loading the car finder. Frame it by eye for now":sh.ext&&L.modelState==="failed"?"Car finder did not load. Frame it by eye":"Lined up. Hold still";
-  return {kind:"ok",text:txt,chips:chips,ready:!(sh.ext&&L.modelState!=="ready"),tgt:tgt,zone:z};
+  return {kind:"ok",text:txt,chips:chips,ready:!(sh.ext&&L.modelState!=="ready"),tgt:tgt,zone:z,crop:crop};
 }
 function frame(){
   if(!L.on)return;
   requestAnimationFrame(frame);
   if(L.paused)return;
   var g=guide(),now=performance.now();
-  if(L.note){if(now<L.note.until)g={kind:"ok",text:L.note.text,chips:g.chips,ready:false,tgt:g.tgt,zone:g.zone};else L.note=null}
+  if(L.note){if(now<L.note.until)g={kind:"ok",text:L.note.text,chips:g.chips,ready:false,tgt:g.tgt,zone:g.zone,crop:g.crop};else L.note=null}
   var cam=$("cam"),ov=$("ov"),vw=video.videoWidth,vh=video.videoHeight;
   if(g.text!==L.said&&(now-L.saidAt>350||g.kind==="ok")){
     L.said=g.text;L.saidAt=now;
@@ -648,9 +648,10 @@ function frame(){
   if(ov.width!==Math.round(w*dpr)||ov.height!==Math.round(h*dpr)){ov.width=Math.round(w*dpr);ov.height=Math.round(h*dpr);ov.style.width=w+"px";ov.style.height=h+"px"}
   ov.style.left=(cw-w)/2+"px";ov.style.top=(ch-h)/2+"px";
   var c=ov.getContext("2d");c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,w,h);c.lineCap="round";c.lineJoin="round";
-  if(g.zone&&!S.shot.manual&&(g.zone.w<.995||g.zone.h<.995)){
-    var zz=g.zone,zx=zz.x*w,zy=zz.y*h,zw=zz.w*w,zh=zz.h*h;c.fillStyle="rgba(0,0,0,.55)";
-    c.fillRect(0,0,w,zy);c.fillRect(0,zy+zh,w,h-zy-zh);c.fillRect(0,zy,zx,zh);c.fillRect(zx+zw,zy,w-zx-zw,zh);
+  if(g.crop){ /* live preview of the square that will be saved */
+    var k2=w/vw,qx=g.crop.x*k2,qy=g.crop.y*k2,qs=g.crop.size*k2;c.fillStyle="rgba(0,0,0,.5)";
+    c.fillRect(0,0,w,qy);c.fillRect(0,qy+qs,w,h-qy-qs);c.fillRect(0,qy,qx,qs);c.fillRect(qx+qs,qy,w-qx-qs,qs);
+    c.lineWidth=2;c.strokeStyle="rgba(255,255,255,.85)";c.strokeRect(qx,qy,qs,qs);
   }
   if(g.tgt){
     var t=g.tgt;c.setLineDash([8,8]);c.lineWidth=2;c.strokeStyle="rgba(255,255,255,.55)";
@@ -674,14 +675,14 @@ function capture(){
   L.lastShot=performance.now();L.readySince=0;
   var src=toCanvas(video,4096),box=S.shot.ext?freshBox():null;
   var fl=$("flash");fl.classList.add("on");setTimeout(function(){fl.classList.remove("on")},60);
-  openReview(src,box?{x:box.x,y:box.y,w:box.w,h:box.h}:null,L.lens);
+  openReview(src,box?{x:box.x,y:box.y,w:box.w,h:box.h}:null,L.lens,L.G&&!L.flat?L.roll:0);
 }
 
 /* ---------- review ---------- */
-function openReview(src,box,lens){
+function openReview(src,box,lens,roll){
   S.gen++;if(S.ctl)S.ctl.abort();L.paused=true;
   var m=measure(src,320),isVin=S.shot.id==="vin";
-  S.photo={src:src,m:m,lens:lens||null,lay:null,shot:S.shot};S.advice={box:box};S.before=false;S.view=wanted()[0];
+  S.photo={src:src,m:m,lens:lens||null,lay:null,shot:S.shot,roll:roll||0};S.advice={box:box};S.before=false;S.view=wanted()[0];
   S.autoP=autoParams(m,box||{x:.12,y:.2,w:.76,h:.62},!S.shot.ext);
   S.params={b:S.autoP.b,s:S.autoP.s,h:S.autoP.h,c:.05};
   $("verdict").hidden=true;$("moves").innerHTML="";$("saveMsg").textContent="";setBusy(null);
@@ -701,23 +702,25 @@ $("viewSeg").addEventListener("click",function(e){var b=e.target.closest("button
 function closeReview(){if($("review").open)$("review").close()}
 $("review").addEventListener("close",function(){S.gen++;if(S.ctl)S.ctl.abort();L.paused=false;L.lastShot=performance.now();L.said=""});
 function clamp(v,a,b){return Math.min(Math.max(v,a),Math.max(a,b))}
-/* where to cut the photo for one output shape; cut means the car does not fit that crop and the shot needs retaking */
-function layout(shape){
-  var W=S.photo.src.width,H=S.photo.src.height,a=ASPECT[shape],box=S.advice&&S.advice.box;
-  var cw=Math.min(W,H*a),ch=cw/a,cx=W/2,cy=H/2;
-  if(box){
-    var bw=box.w*W,bh=box.h*H;cx=(box.x+box.w/2)*W;cy=(box.y+box.h/2)*H;
-    if(bw>cw*.985||bh>ch*.985)return {sx:clamp(cx-cw/2,0,W-cw),sy:clamp(cy-ch/2,0,H-ch),sw:cw,sh:ch,fit:false,cut:true};
-    /* same car size in every photo: tighten the crop when the car is small in it, but never below half */
-    var want=Math.max(bw/(S.photo.shot.fill||.86),bh/.78*a);
-    if(want<cw){cw=Math.max(want,cw*.5);ch=cw/a}
-  }
-  return {sx:clamp(cx-cw/2,0,W-cw),sy:clamp(cy-ch/2,0,H-ch),sw:cw,sh:ch,fit:false};
+function fillFor(sh){var r=S.refs[S.refActive];return r&&r.box?Math.min(.94,Math.max(.4,r.box.w)):(sh.fill||.86)}
+/* the square to keep around the car, in pixels of a W x H frame: tight enough that the car fills it the same
+   way in every photo, never so small that it turns soft */
+function cropFor(box,W,H,sh){
+  var max=Math.min(W,H),min=Math.min(max,Math.max(800,max*.45)),bw=box.w*W,bh=box.h*H;
+  var want=Math.max(bw/fillFor(sh),bh/.78),size=Math.min(max,Math.max(min,want));
+  var cx=(box.x+box.w/2)*W,cy=(box.y+box.h/2)*H;
+  return {x:clamp(cx-size/2,0,W-size),y:clamp(cy-size/2,0,H-size),size:size,big:want>max*1.03,small:want<min*.85,cut:bw>max*.985||bh>max*.985};
 }
-function compose(shape,maxSide,toned){
+/* where to cut the photo; cut means the car does not fit a square and the shot needs retaking */
+function layout(shape){
+  var W=S.photo.src.width,H=S.photo.src.height,box=S.advice&&S.advice.box,m=Math.min(W,H);
+  if(box&&S.photo.shot.ext){var cp=cropFor(box,W,H,S.photo.shot);return {sx:cp.x,sy:cp.y,sw:cp.size,sh:cp.size,fit:false,cut:cp.cut}}
+  return {sx:(W-m)/2,sy:(H-m)/2,sw:m,sh:m,fit:false,cut:false};
+}
+function compose(shape,maxSide,toned,exact){
   var l=layout(shape),a=ASPECT[shape],src=S.photo.src,ow,oh;
   if(!l.fit){ow=l.sw;oh=l.sh}else if(l.sw/l.sh>a){ow=l.sw;oh=ow/a}else{oh=l.sh;ow=oh*a}
-  var k=Math.min(1,maxSide/Math.max(ow,oh)),c=document.createElement("canvas");c.width=Math.max(1,Math.round(ow*k));c.height=Math.max(1,Math.round(oh*k));
+  var k=exact?maxSide/Math.max(ow,oh):Math.min(1,maxSide/Math.max(ow,oh)),c=document.createElement("canvas");c.width=Math.max(1,Math.round(ow*k));c.height=Math.max(1,Math.round(oh*k));
   var x=c.getContext("2d",{willReadFrequently:true}),m={dx:0,dy:0,ds:c.width/l.sw};
   if(l.fit){
     var t=document.createElement("canvas");t.width=36;t.height=Math.max(8,Math.round(36/a));
@@ -727,7 +730,22 @@ function compose(shape,maxSide,toned){
     x.fillStyle="rgba(8,11,15,.42)";x.fillRect(0,0,c.width,c.height);
     var s=Math.min(c.width/l.sw,c.height/l.sh),dw=l.sw*s,dh=l.sh*s;m={dx:(c.width-dw)/2,dy:(c.height-dh)/2,ds:s};
     x.drawImage(src,l.sx,l.sy,l.sw,l.sh,m.dx,m.dy,dw,dh);
-  }else x.drawImage(src,l.sx,l.sy,l.sw,l.sh,0,0,c.width,c.height);
+  }else{
+    /* straighten: turn the photo back by the tilt the phone had when it was taken */
+    var rot=-(S.photo.roll||0)*Math.PI/180;
+    if(Math.abs(rot)<.003||Math.abs(rot)>.21)x.drawImage(src,l.sx,l.sy,l.sw,l.sh,0,0,c.width,c.height);
+    else{
+      var ccx=l.sx+l.sw/2,ccy=l.sy+l.sh/2,co=Math.cos(rot),si=Math.sin(rot),zm=1;
+      var covered=function(z){
+        return [[-1,-1],[1,-1],[1,1],[-1,1]].every(function(q){
+          var px=q[0]*l.sw/2/z,py=q[1]*l.sh/2/z,sxp=ccx+px*co+py*si,syp=ccy-px*si+py*co;
+          return sxp>=0&&sxp<=src.width&&syp>=0&&syp<=src.height;
+        });
+      };
+      while(zm<1.3&&!covered(zm))zm+=.005;
+      x.save();x.translate(c.width/2,c.height/2);x.rotate(rot);x.scale(m.ds*zm,m.ds*zm);x.drawImage(src,-ccx,-ccy);x.restore();
+    }
+  }
   if(toned)tone(x,c.width,c.height,S.params);
   return {canvas:c,lay:l,map:m};
 }
@@ -759,10 +777,13 @@ function drawLightNote(){
   var t=parts.length?"<b>Light fix:</b> "+parts.join(", ")+".":"<b>Exposure looks right.</b> No fix was needed.";
   if(m.clipHi>12)t+=" Part of the frame is blown out white, which editing cannot bring back.";
   var l=S.photo.lay,nm=S.view==="square"?"square":"9:16";
+  var tilt=Math.abs(S.photo.roll||0);
+  if(tilt>=.2&&tilt<=12)t+=" Straightened by "+tilt.toFixed(1)+"°.";
   var bad=wanted().filter(function(k){return layout(k).cut}).map(function(k){return k==="square"?"square":"9:16"});
   if(bad.length)t="<b class=\"s-bad\">The car is cut off in the "+bad.join(" and ")+" crop.</b> Retake it: step back, or switch to a wider lens, until the whole car sits inside the bright area. This shot cannot be kept.";
+  else if(tilt>12)t="<b class=\"s-bad\">The phone was tilted "+Math.round(tilt)+"°, too far to straighten cleanly.</b> Retake it with the level line green. This shot cannot be kept.";
   else t+=" Cropped to "+nm+".";
-  $("keepBtn").disabled=$("saveBtn").disabled=!!bad.length;
+  $("keepBtn").disabled=$("saveBtn").disabled=!!bad.length||tilt>12;
   $("lightNote").innerHTML=t;
 }
 function setBusy(t){$("busy").hidden=!t;if(t)$("busyText").textContent=t}
@@ -772,19 +793,18 @@ function showMsg(t){$("coachMsg").hidden=!t;$("coachMsg").textContent=t||""}
 function headers(key){return {"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"}}
 function modelName(){return store("model")||"claude-sonnet-5-5"}
 function coachPrompt(){
-  var ph=S.photo,sh=ph.shot,n=S.refs.length;
-  return "You are a car-listing photo coach. Image 1 is the photo the seller just took."
-  +(n?" Images 2 to "+(n+1)+" are reference car photos the seller likes: compare image 1 with them for camera height, distance, angle and overall look.":"")
-  +"\nIntended shot: "+sh.label+" ("+(sh.ext?"exterior":"interior or detail")+"). How it should be taken: "+sh.stand+" Camera height: "+sh.height
-  +"\nThe photo is "+ph.src.width+"x"+ph.src.height+". It will be cropped around the subject to "+(S.shape==="both"?"a square for Facebook Marketplace and a 9:16 frame for Instagram Reels":S.shape==="square"?"a square for Facebook Marketplace":"a 9:16 frame for Instagram Reels")+", so do not ask for the phone to be turned; judge whether the subject has room for that crop."
-  +"\nLens used: "+(ph.lens||"unknown")+". iPhone lenses: 0.5x ultra-wide (stretches a car's exterior, useful inside the cabin), 1x, and telephoto (flattering outside, needs distance)."
-  +"\nMeasured: mean brightness "+ph.m.mean.toFixed(2)+" (0 to 1), "+ph.m.clipLo.toFixed(0)+"% crushed black, "+ph.m.clipHi.toFixed(0)+"% blown white."
-  +"\n\nCompare image 1 with how professional dealer listing photos take this shot. Exterior: whole car in frame with an even margin of roughly 8 to 12 percent each side; camera at headlight-to-mirror height, not looking down on the roof; phone level; no wide-lens stretch; car clearly lit, not a silhouette; few reflections, shadows across the car, or clutter. Interior: the whole subject visible (full dash, both seats, whole bench, whole trunk opening, readable odometer); phone level with the dash line; cabin bright enough to see materials and condition; windows not blown out; no glare on screens or gauges; no clutter, trash or personal items; steering wheel straight; nothing blurred."
+  var ph=S.photo,sh=ph.shot,n=S.refs.length,done=!!(S.advice&&S.advice.box);
+  return "You are a car-listing photo coach. Image 1 is "+(done?"the finished photo exactly as it will be posted: the app has already cropped it square around the car, straightened it and corrected the exposure":"the photo the seller just took; the app will crop it to a square around the subject, straighten it and correct the exposure")+"."
+  +(n?" Images 2 to "+(n+1)+" are reference car photos the seller likes: compare image 1 with them for camera height, angle and overall look.":"")
+  +"\nIntended shot: "+sh.label+" ("+(sh.ext||sh.id==="rims"?"exterior":"interior or detail")+"). How it should be taken: "+sh.stand+" Camera height: "+sh.height
+  +"\nLens used: "+(ph.lens||"unknown")+". iPhone lenses: 0.5x ultra-wide (can stretch a car's exterior, useful inside the cabin), 1x, and telephoto (flattering outside, needs distance)."
+  +"\nMeasured on the original frame: mean brightness "+ph.m.mean.toFixed(2)+" (0 to 1), "+ph.m.clipLo.toFixed(0)+"% crushed black, "+ph.m.clipHi.toFixed(0)+"% blown white."
+  +"\n\nCropping, centering, straightening and exposure are handled automatically, so do not ask the seller to move closer, re-center or level the phone unless part of the subject is cut off or it is visibly soft or tiny. Judge what only a retake can fix. Exterior: camera height and angle (headlight-to-mirror height, not looking down on the roof or hood), the right corner or side showing, wide-lens stretch, harsh reflections or shadows across the car, a silhouette against bright sky, people or clutter around the car, dirt, blur. Interior and detail shots: whole subject visible (full dash, both seats, whole bench, whole trunk opening, whole wheel, readable odometer), no glare on screens or gauges, no clutter, trash or personal items, steering wheel straight, nothing blurred."
   +"\n\nReply with only JSON in this shape:\n"
   +'{"found":true,"score":0,"verdict":"8 words max","cut_off":false,"sharp":true,"box":{"x":0,"y":0,"w":1,"h":1},'
   +'"moves":[{"do":"up|down|left|right|back|closer|tilt|lens|light|other","text":"one concrete instruction, 14 words max"}],'
   +'"lens":{"use":"0.5x|1x|Tele","switch":false,"why":"12 words max"},"light":{"dark":false,"blown":false,"note":"14 words max"},"ref":"16 words max on how it differs from the references, or empty"}'
-  +"\nRules: score is 0 to 100 for listing quality, 80 or more means listing-ready. box is the main subject's bounding box as fractions of image 1 (x and y are the top-left corner). moves holds at most 3 changes for the retake, most important first: up means raise the phone, down means lower it, left and right mean step sideways from the photographer's point of view, back means step away, closer means step toward, tilt means level or rotate the phone, lens means change lens, light means move relative to the sun, open doors or add light, other covers tidying or straightening the wheel. Give real amounts where you can. If the shot is listing-ready return an empty moves list. If the subject is not in the photo set found to false.";
+  +"\nRules: score is 0 to 100 for listing quality, 80 or more means listing-ready; a clean, well-lit, correctly angled photo should score 80 or more. box is the main subject's bounding box as fractions of image 1 (x and y are the top-left corner). moves holds at most 3 changes for the retake, most important first: up means raise the phone, down means lower it, left and right mean step sideways from the photographer's point of view, back means step away, closer means step toward, tilt means level or rotate the phone, lens means change lens, light means move relative to the sun, open doors or add light, other covers tidying or straightening the wheel. Use feet and inches. If the shot is listing-ready return an empty moves list. If the subject is not in the photo set found to false.";
 }
 /* one request to Claude with images and a prompt; resolves with the JSON object in the reply */
 function askClaude(blobs,prompt,maxTokens,signal){
@@ -808,7 +828,7 @@ function claudeCheck(){
   if(!store("key")){openSettings();return}
   var gen=++S.gen;if(S.ctl)S.ctl.abort();var ctl=new AbortController();S.ctl=ctl;
   setBusy("Claude is checking the shot");showMsg("");
-  canvasBlob(toCanvas(S.photo.src,1280),.82).then(function(b){
+  canvasBlob(S.advice&&S.advice.box?compose("square",1280,true).canvas:toCanvas(S.photo.src,1280),.85).then(function(b){
     return askClaude([b].concat(S.refs.map(function(r){return r.blob})),coachPrompt(),900,ctl.signal);
   }).then(function(j){if(gen!==S.gen)return;setBusy(null);showAdvice(j)}).catch(function(e){
     if(gen!==S.gen||(e&&e.name==="AbortError"))return;setBusy(null);showMsg(claudeErr(e));
@@ -898,7 +918,7 @@ function showAdvice(j){
 function finalFiles(){
   var sh=S.photo.shot,n=("0"+(SHOTS.indexOf(sh)+1)).slice(-2);
   return Promise.all(wanted().map(function(k){
-    return canvasBlob(compose(k,k==="reel"?2560:2160,true).canvas,.93).then(function(b){return {blob:b,name:n+"-"+sh.id+"-"+k+".jpg"}});
+    return canvasBlob(compose(k,Math.min(S.photo.src.width,S.photo.src.height)>=2000?1440:1080,true,true).canvas,.93).then(function(b){return {blob:b,name:n+"-"+sh.id+"-"+k+".jpg"}});
   }));
 }
 function shareOrDownload(list){
@@ -959,6 +979,7 @@ $("refInput").addEventListener("change",function(){
 
 /* ---------- settings ---------- */
 function openSettings(){
+  $("camInfo").textContent=video.videoWidth?"Camera feed: "+video.videoWidth+" × "+video.videoHeight+" pixels. Photos save at "+(Math.min(video.videoWidth,video.videoHeight)>=2000?1440:1080)+" × "+(Math.min(video.videoWidth,video.videoHeight)>=2000?1440:1080)+".":"";
   $("keyIn").value=store("key")||"";$("modelIn").value=modelName();$("keyMsg").textContent="";drawRefs();
   if(!$("settings").open)$("settings").showModal();
 }
