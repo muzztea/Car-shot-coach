@@ -889,11 +889,18 @@ function readVin(){
   var st=$("vinStatus");if(!store("key")){openSettings();return}
   var gen=++S.gen;if(S.ctl)S.ctl.abort();var ctl=new AbortController();S.ctl=ctl;
   st.className="note";st.textContent="Reading the VIN from the photo";
-  canvasBlob(toCanvas(S.photo.src,1568),.9).then(function(b){
-    return askClaude([b],"This is a close-up photo of a vehicle identification number (VIN): a dashboard plate seen through the windshield, a door-jamb label, or a stamped plate. Read the 17-character VIN exactly as printed. A VIN uses digits and capital letters and never contains I, O or Q. Do not guess from a barcode. Reply with only JSON: {\"found\":true,\"vin\":\"17 characters\",\"unsure\":[positions from 1 to 17 that you could not read with confidence]}. If no VIN is readable set found to false.",300,ctl.signal);
+  /* the whole photo plus four overlapping enlarged quarters at full camera sharpness, so small print stays readable */
+  var src=S.photo.src,W=src.width,H=src.height,parts=[canvasBlob(toCanvas(src,1568),.9)];
+  if(Math.min(W,H)>1100)[[0,0],[.4,0],[0,.4],[.4,.4]].forEach(function(o){
+    var t=document.createElement("canvas"),tw=Math.round(W*.6),th=Math.round(H*.6),k=Math.min(1,1568/Math.max(tw,th));
+    t.width=Math.round(tw*k);t.height=Math.round(th*k);t.getContext("2d").drawImage(src,Math.round(W*o[0]),Math.round(H*o[1]),tw,th,0,0,t.width,t.height);
+    parts.push(canvasBlob(t,.92));
+  });
+  Promise.all(parts).then(function(bs){
+    return askClaude(bs,"Image 1 is a photo containing a vehicle identification number (VIN): a dashboard plate seen through the windshield, a door-jamb label, or a stamped plate."+(bs.length>1?" Images 2 to 5 are overlapping enlarged quarters of the same photo (top-left, top-right, bottom-left, bottom-right); use them to read small print.":"")+" The VIN may be small, at an angle, or partly behind glass reflections. Read the 17-character VIN exactly as printed. A VIN uses digits and capital letters and never contains I, O or Q. Do not guess from a barcode. Reply with only JSON: {\"found\":true,\"vin\":\"17 characters\",\"unsure\":[positions from 1 to 17 that you could not read with confidence]}. If no VIN is readable set found to false.",300,ctl.signal);
   }).then(function(j){
     if(gen!==S.gen)return;
-    if(!j||j.found===false||!j.vin){st.className="note s-bad";st.textContent="No VIN could be read from this photo. Get closer, cut the glare and retake, or type it in.";return}
+    if(!j||j.found===false||!j.vin){st.className="note s-bad";st.textContent="No VIN could be read from this photo ("+W+" × "+H+"). Get close enough that the VIN spans at least half the box, shade any glare, hold still, and retake. Or type it in.";return}
     $("vinIn").value=vinClean(j.vin);
     var u=(Array.isArray(j.unsure)?j.unsure:[]).filter(function(n){return n>=1&&n<=17});
     vinCheck(u.length?" Least certain: position "+u.join(", ")+".":"");
