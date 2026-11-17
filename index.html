@@ -344,6 +344,13 @@ function store(k,v){try{if(v===undefined)return localStorage.getItem("csc_"+k);i
 var S={shot:SHOTS[0],shape:"square",view:"square",vin:null,vinOk:false,vinInfo:"",auto:store("auto")!=="0",refs:[],refActive:-1,saved:{},kept:{},photo:null,params:{b:0,s:0,h:0,c:.05},autoP:null,before:false,advice:null,gen:0,ctl:null,raf:0,count:0};
 var L={on:false,stream:null,model:null,modelState:"idle",box:null,boxAt:0,G:null,roll:0,pitch:0,rot:0,light:null,lenses:[],lens:null,readySince:0,lastShot:0,paused:false,said:"",saidAt:0,note:null,flat:false};
 var video=$("video"),isIOS=typeof DeviceMotionEvent!=="undefined"&&typeof DeviceMotionEvent.requestPermission==="function";
+L.sgn=isIOS?-1:1;L.flip=0;L.q=0;
+/* the camera frame turned upright: q is how far the phone is rotated from upright, in quarter turns (0, 90, -90) */
+function upright(src,q,maxSide){
+  var sw=src.videoWidth||src.naturalWidth||src.width,sh=src.videoHeight||src.naturalHeight||src.height,k=Math.min(1,maxSide/Math.max(sw,sh)),side=Math.abs(q)===90;
+  var c=document.createElement("canvas");c.width=Math.max(1,Math.round((side?sh:sw)*k));c.height=Math.max(1,Math.round((side?sw:sh)*k));
+  var x=c.getContext("2d",{willReadFrequently:true});x.translate(c.width/2,c.height/2);x.rotate(-q*Math.PI/180);x.drawImage(src,-sw*k/2,-sh*k/2,sw*k,sh*k);return c;
+}
 
 /* ---------- setup screen ---------- */
 function plan(shot){
@@ -472,8 +479,9 @@ function bestCar(preds,w,h){
 function detectLoop(){
   if(!L.on)return;
   if(L.model&&!L.paused&&S.shot.ext&&video.readyState>=2&&video.videoWidth){
-    L.model.detect(video,8,.3).then(function(preds){
-      var b=bestCar(preds,video.videoWidth,video.videoHeight),now=performance.now();
+    var dc=upright(video,L.q,640);
+    L.model.detect(dc,8,.3).then(function(preds){
+      var b=bestCar(preds,dc.width,dc.height),now=performance.now();
       if(b){
         if(L.box&&now-L.boxAt<800){var k=.45;L.box={x:L.box.x+(b.x-L.box.x)*k,y:L.box.y+(b.y-L.box.y)*k,w:L.box.w+(b.w-L.box.w)*k,h:L.box.h+(b.h-L.box.h)*k}}else L.box=b;
         L.boxAt=now;
@@ -484,7 +492,7 @@ function detectLoop(){
 function lightLoop(){
   if(!L.on)return;
   if(!L.paused&&video.readyState>=2&&video.videoWidth){
-    try{var m=measure(video,160);L.light={m:m,car:(S.shot.ext&&freshBox())?regionStats(m,L.box):null}}catch(e){}
+    try{var m=measure(upright(video,L.q,160),160);L.light={m:m,car:(S.shot.ext&&freshBox())?regionStats(m,L.box):null}}catch(e){}
   }
   setTimeout(lightLoop,450);
 }
@@ -493,12 +501,22 @@ function freshBox(){return L.box&&performance.now()-L.boxAt<1200?L.box:null}
 /* ---------- motion: level, pitch, steadiness ---------- */
 function onMotion(e){
   var g=e.accelerationIncludingGravity;if(!g||g.x===null)return;
-  var s=isIOS?-1:1,x=g.x*s,y=g.y*s,z=g.z*s;
+  var x=g.x*L.sgn,y=g.y*L.sgn,z=g.z*L.sgn;
   if(!L.G)L.G={x:x,y:y,z:z};else{L.G.x+=(x-L.G.x)*.2;L.G.y+=(y-L.G.y)*.2;L.G.z+=(z-L.G.z)*.2}
-  var a=Math.atan2(L.G.x,L.G.y)*180/Math.PI,d=((a%90)+90)%90;if(d>45)d-=90;L.roll=d;
   var inPlane=Math.sqrt(L.G.x*L.G.x+L.G.y*L.G.y);
   L.pitch=Math.atan2(L.G.z,inPlane)*180/Math.PI;
   L.flat=inPlane<.5*Math.sqrt(inPlane*inPlane+L.G.z*L.G.z); /* aimed steeply up or down: roll cannot be trusted */
+  if(!L.flat){
+    /* gravity in screen coordinates, so this works whether or not the page rotates with the phone */
+    var th=(typeof window.orientation==="number"?window.orientation:(screen.orientation&&screen.orientation.angle)||0)*Math.PI/180;
+    var sx=L.G.x*Math.cos(th)-L.G.y*Math.sin(th),sy=L.G.x*Math.sin(th)+L.G.y*Math.cos(th),a=Math.atan2(sx,sy)*180/Math.PI;
+    /* nobody shoots upside down: a steady upside-down reading means this browser reports gravity with the other sign */
+    if(Math.abs(a)>150){L.roll=0;if(++L.flip>12){L.sgn=-L.sgn;L.G=null;L.flip=0}return}
+    L.flip=0;
+    var d=a-L.q;
+    if(Math.abs(d)>55){L.q=Math.round(a/90)*90;d=a-L.q;L.box=null}
+    L.roll=d;
+  }
   var r=e.rotationRate;if(r&&r.alpha!==null){var mag=Math.sqrt(r.alpha*r.alpha+r.beta*r.beta+r.gamma*r.gamma);L.rot+=(mag-L.rot)*.25}
 }
 function askMotion(){
@@ -575,7 +593,7 @@ function target(z){
   return {w:wpx/vw,h:hpx/vh,cx:.5,cy:.5};
 }
 function guide(){
-  var vw=video.videoWidth,vh=video.videoHeight,sh=S.shot,out=null;
+  var side=Math.abs(L.q)===90,vw=side?video.videoHeight:video.videoWidth,vh=side?video.videoWidth:video.videoHeight,sh=S.shot,out=null;
   var chips={Frame:"na",Level:"na",Height:"na",Light:"na",Steady:"na"};
   function say(kind,text){if(!out)out={kind:kind,text:text}}
   if(!vw)return {kind:"dot",text:"Starting the camera",chips:chips,ready:false,tgt:null,zone:null};
@@ -648,24 +666,27 @@ function frame(){
   if(ov.width!==Math.round(w*dpr)||ov.height!==Math.round(h*dpr)){ov.width=Math.round(w*dpr);ov.height=Math.round(h*dpr);ov.style.width=w+"px";ov.style.height=h+"px"}
   ov.style.left=(cw-w)/2+"px";ov.style.top=(ch-h)/2+"px";
   var c=ov.getContext("2d");c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,w,h);c.lineCap="round";c.lineJoin="round";
+  /* draw in upright space: uw x uh is the frame as it will be saved, turned to match how the phone is held */
+  var side=Math.abs(L.q)===90,uw=side?h:w,uh=side?w:h,uvw=side?vh:vw;
+  c.translate(w/2,h/2);c.rotate(L.q*Math.PI/180);c.translate(-uw/2,-uh/2);
   if(g.crop){ /* live preview of the square that will be saved */
-    var k2=w/vw,qx=g.crop.x*k2,qy=g.crop.y*k2,qs=g.crop.size*k2;c.fillStyle="rgba(0,0,0,.5)";
-    c.fillRect(0,0,w,qy);c.fillRect(0,qy+qs,w,h-qy-qs);c.fillRect(0,qy,qx,qs);c.fillRect(qx+qs,qy,w-qx-qs,qs);
+    var k2=uw/uvw,qx=g.crop.x*k2,qy=g.crop.y*k2,qs=g.crop.size*k2;c.fillStyle="rgba(0,0,0,.5)";
+    c.fillRect(0,0,uw,qy);c.fillRect(0,qy+qs,uw,uh-qy-qs);c.fillRect(0,qy,qx,qs);c.fillRect(qx+qs,qy,uw-qx-qs,qs);
     c.lineWidth=2;c.strokeStyle="rgba(255,255,255,.85)";c.strokeRect(qx,qy,qs,qs);
   }
   if(g.tgt){
     var t=g.tgt;c.setLineDash([8,8]);c.lineWidth=2;c.strokeStyle="rgba(255,255,255,.55)";
-    c.strokeRect((t.cx-t.w/2)*w,(t.cy-t.h/2)*h,t.w*w,t.h*h);c.setLineDash([]);
+    c.strokeRect((t.cx-t.w/2)*uw,(t.cy-t.h/2)*uh,t.w*uw,t.h*uh);c.setLineDash([]);
   }
   var b=S.shot.ext?freshBox():null;
   if(b){
-    var x=b.x*w,y=b.y*h,bw=b.w*w,bh=b.h*h,l=Math.min(bw,bh)*.16;
+    var x=b.x*uw,y=b.y*uh,bw=b.w*uw,bh=b.h*uh,l=Math.min(bw,bh)*.16;
     c.lineWidth=4;c.strokeStyle=g.chips.Frame==="ok"?"#49C47E":"#F5B21A";c.beginPath();
     c.moveTo(x,y+l);c.lineTo(x,y);c.lineTo(x+l,y);c.moveTo(x+bw-l,y);c.lineTo(x+bw,y);c.lineTo(x+bw,y+l);
     c.moveTo(x+bw,y+bh-l);c.lineTo(x+bw,y+bh);c.lineTo(x+bw-l,y+bh);c.moveTo(x+l,y+bh);c.lineTo(x,y+bh);c.lineTo(x,y+bh-l);c.stroke();
   }
   if(L.G&&g.chips.Level!=="na"){
-    var len=Math.min(w,h)*.17;c.save();c.translate(w/2,h/2);
+    var len=Math.min(w,h)*.17;c.save();c.translate(uw/2,uh/2);
     c.lineWidth=2;c.strokeStyle="rgba(255,255,255,.6)";c.beginPath();c.moveTo(-len-26,0);c.lineTo(-len-6,0);c.moveTo(len+6,0);c.lineTo(len+26,0);c.stroke();
     c.rotate(L.roll*Math.PI/180);c.lineWidth=3;c.strokeStyle=Math.abs(L.roll)<=2?"#49C47E":"#F5B21A";c.beginPath();c.moveTo(-len,0);c.lineTo(len,0);c.stroke();c.restore();
   }
@@ -673,7 +694,7 @@ function frame(){
 function capture(){
   if(!video.videoWidth||L.paused)return;
   L.lastShot=performance.now();L.readySince=0;
-  var src=toCanvas(video,4096),box=S.shot.ext?freshBox():null;
+  var src=upright(video,L.q,4096),box=S.shot.ext?freshBox():null;
   var fl=$("flash");fl.classList.add("on");setTimeout(function(){fl.classList.remove("on")},60);
   openReview(src,box?{x:box.x,y:box.y,w:box.w,h:box.h}:null,L.lens,L.G&&!L.flat?L.roll:0);
 }
@@ -979,7 +1000,7 @@ $("refInput").addEventListener("change",function(){
 
 /* ---------- settings ---------- */
 function openSettings(){
-  $("camInfo").textContent=video.videoWidth?"Camera feed: "+video.videoWidth+" × "+video.videoHeight+" pixels. Photos save at "+(Math.min(video.videoWidth,video.videoHeight)>=2000?1440:1080)+" × "+(Math.min(video.videoWidth,video.videoHeight)>=2000?1440:1080)+".":"";
+  $("camInfo").textContent=video.videoWidth?"Camera feed: "+video.videoWidth+" × "+video.videoHeight+" pixels, phone turned "+L.q+"°. Photos save at "+(Math.min(video.videoWidth,video.videoHeight)>=2000?1440:1080)+" × "+(Math.min(video.videoWidth,video.videoHeight)>=2000?1440:1080)+".":"";
   $("keyIn").value=store("key")||"";$("modelIn").value=modelName();$("keyMsg").textContent="";drawRefs();
   if(!$("settings").open)$("settings").showModal();
 }
