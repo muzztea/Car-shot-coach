@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0F14">
+<title>Car Shot Coach Live</title>
+<style>
+/* Layout idea: a camera. Setup card first, then a full-screen viewfinder with one instruction at a time, then a review sheet. One dark theme by choice. */
+:root{
+  --bg:#0B0F14; --surface:#161D25; --sunk:#0E141A; --ink:#EEF2F6; --muted:#9BA7B4; --line:#2B3541;
+  --accent:#F5B21A; --accent-ink:#1B1400; --good:#49C47E; --warn:#F0AC42; --bad:#F47165;
+  --display:"SF Pro Display",-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
+  --body:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
+  /* concentric corners: inner radius = outer radius - padding */
+  --r-card:28px; --pad:12px; --r-in:calc(var(--r-card) - var(--pad)); --pad-in:6px; --r-in2:calc(var(--r-in) - var(--pad-in));
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:400 16px/1.45 var(--body);-webkit-text-size-adjust:100%}
+main{max-width:560px;margin:0 auto;padding:calc(16px + env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:14px}
+h1,h2,h3,h4{font-family:var(--display);margin:0;text-wrap:balance}
+h1{font-size:28px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+h2{font-size:12.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+p{margin:0}
+.top p{color:var(--muted);font-size:15px;margin-top:6px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);padding:var(--pad);display:flex;flex-direction:column;gap:12px}
+.card>h2{padding:6px 6px 0}
+.inner{background:var(--sunk);border-radius:var(--r-in);padding:var(--pad-in)}
+@supports (corner-shape:squircle){.card,.inner,.btn,.chip,.seg,.banner,dialog,.stage canvas{corner-shape:squircle}}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+[hidden]{display:none!important}
+.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.chip{border:0;background:var(--surface);color:var(--ink);border-radius:var(--r-in2);padding:10px 4px;font:600 14px var(--body);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;min-height:44px}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.chip .tick{width:16px;height:16px;border-radius:50%;background:var(--good);color:#04210F;display:none;align-items:center;justify-content:center;font-size:11px;line-height:1;font-weight:800}
+.chip.saved .tick{display:inline-flex}
+.grp{font:600 11px var(--body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:6px 6px 4px}
+.brief{display:grid;grid-template-columns:104px 1fr;gap:12px;align-items:center;padding:6px}
+.brief svg{width:104px;height:104px;display:block}
+.brief h3{font-size:19px;font-weight:700;margin-bottom:6px}
+.brief ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;font-size:14px}
+.brief li{display:grid;grid-template-columns:52px 1fr;gap:8px}
+.brief li b{font:600 11px var(--body);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding-top:3px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:0 6px}
+.row>span{font-size:14px;font-weight:500}
+.seg{display:inline-flex;background:var(--sunk);border-radius:var(--r-in);padding:4px;gap:4px}
+.seg button{border:0;background:none;color:var(--muted);font:600 13px var(--body);padding:8px 12px;border-radius:calc(var(--r-in) - 4px);cursor:pointer;min-height:36px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:var(--r-in);font:600 16px var(--body);padding:14px 16px;min-height:52px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-align:center}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-family:var(--display);font-weight:800;font-size:18px}
+.btn.small{min-height:44px;padding:10px 14px;font-size:14px}
+.btn[disabled]{opacity:.5;cursor:default}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.actions .primary,.actions .full{grid-column:1/-1}
+.fine{font-size:12.5px;color:var(--muted);padding:0 6px}
+.err{color:var(--bad);font-size:14px;padding:0 6px;font-weight:500}
+.link{background:none;border:0;padding:6px 2px;color:var(--muted);font:500 13px var(--body);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.foot{display:flex;gap:18px;justify-content:center}
+
+/* camera */
+#cam{position:fixed;inset:0;background:#000;overflow:hidden;z-index:5}
+#video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+#ov{position:absolute;pointer-events:none}
+.camtop{position:absolute;top:0;left:0;right:0;padding:calc(10px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 18px calc(12px + env(safe-area-inset-left));display:flex;gap:8px;align-items:center;justify-content:space-between;background:linear-gradient(rgba(0,0,0,.72),rgba(0,0,0,0))}
+.round{width:44px;height:44px;border-radius:50%;border:0;background:rgba(20,26,33,.78);color:#fff;display:grid;place-items:center;cursor:pointer;flex:none}
+.round svg{width:20px;height:20px}
+#shotSel{flex:0 1 auto;min-width:0;height:44px;border-radius:22px;border:0;background:rgba(20,26,33,.78);color:#fff;font:600 16px var(--body);padding:0 14px;text-align:center}
+.cambottom{position:absolute;left:0;right:0;bottom:0;padding:28px calc(12px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));display:flex;flex-direction:column;gap:10px;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.8) 45%)}
+.status{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.st{display:inline-flex;align-items:center;gap:5px;font:600 11.5px var(--body);letter-spacing:.03em;padding:4px 9px;border-radius:99px;background:rgba(20,26,33,.78);color:#C9D2DC}
+.st i{width:8px;height:8px;border-radius:50%;background:#6A7684}
+.st.ok{color:#fff}.st.ok i{background:var(--good)}
+.st.bad{color:#fff}.st.bad i{background:var(--accent);border-radius:2px;transform:rotate(45deg)}
+.banner{background:rgba(12,16,21,.9);color:#fff;border-radius:var(--r-in);padding:10px 12px;display:flex;gap:10px;align-items:center;font:700 18px/1.2 var(--display);min-height:58px}
+.ico{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:var(--accent-ink)}
+.ico svg{width:21px;height:21px}
+.banner.ok .ico{background:var(--good);color:#04210F}
+.controls{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px}
+.lens{justify-self:start;display:inline-flex;gap:4px;background:rgba(20,26,33,.78);border-radius:22px;padding:4px}
+.lens button{border:0;background:none;color:#C9D2DC;font:700 13px var(--body);min-width:40px;height:36px;border-radius:18px;cursor:pointer;padding:0 8px}
+.lens button[aria-pressed="true"]{background:#fff;color:#000}
+#shutter{width:76px;height:76px;border-radius:50%;border:4px solid #fff;background:none;padding:0;cursor:pointer;position:relative}
+#shutter::after{content:"";position:absolute;inset:5px;border-radius:50%;background:#fff}
+#shutter.ready::after{background:var(--good)}
+#autoBtn{justify-self:end;height:44px;border-radius:22px;border:0;background:rgba(20,26,33,.78);color:#C9D2DC;font:700 13px var(--body);padding:0 14px;cursor:pointer}
+#autoBtn[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}
+#flash.on{opacity:.85;transition:none}
+@media (prefers-reduced-motion:reduce){#flash{display:none}}
+
+/* dialogs */
+dialog{border:1px solid var(--line);border-radius:var(--r-card);background:var(--surface);color:var(--ink);padding:0;width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px)}
+dialog::backdrop{background:rgba(3,5,8,.72)}
+.dlg{padding:var(--pad);display:flex;flex-direction:column;gap:12px}
+.dlg>h3{font-size:20px;font-weight:800;padding:6px 6px 0}
+.dlg h4{font:700 14px var(--display);margin:0 0 3px}
+.dlg section{padding:0 6px;max-width:62ch}
+.dlg section p,.dlg li{font-size:14px;color:var(--muted)}
+.stagewrap{display:flex;justify-content:center;background:var(--sunk);border-radius:var(--r-in);padding:var(--pad-in);min-height:120px;align-items:center}
+.stage{position:relative;line-height:0}
+.stage canvas{border-radius:var(--r-in2);display:block}
+.stage>svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.verdict{display:grid;grid-template-columns:76px 1fr;gap:14px;align-items:center;padding:2px 6px}
+.ring{width:76px;height:76px}
+.ring text{font:800 26px var(--display);fill:var(--ink);font-variant-numeric:tabular-nums}
+.verdict h3{font-size:20px;font-weight:700;line-height:1.15}
+.verdict p{font-size:14px;color:var(--muted);margin-top:3px}
+.pill{display:inline-block;font:600 11px var(--body);letter-spacing:.06em;text-transform:uppercase;border-radius:99px;padding:3px 9px;border:1.5px solid currentColor;margin-bottom:6px}
+.s-good{color:var(--good)}.s-warn{color:var(--warn)}.s-bad{color:var(--bad)}
+.moves{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.moves li{display:flex;gap:10px;align-items:center;background:var(--sunk);border-radius:var(--r-in);padding:8px 10px;font-size:15px;font-weight:500}
+.moves .ico{background:var(--surface);color:var(--ink)}
+.note{font-size:14px;color:var(--muted);padding:0 6px}
+.note b{color:var(--ink);font-weight:600}
+.sliders{display:grid;gap:8px;padding:4px 6px}
+.sl{display:grid;grid-template-columns:86px 1fr 38px;gap:10px;align-items:center;font-size:14px}
+.sl output{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+input[type=range]{width:100%;accent-color:var(--accent);height:28px}
+.busy{display:flex;gap:10px;align-items:center;padding:6px;font-weight:500}
+.spin{width:18px;height:18px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:sp 1s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none;border-right-color:var(--accent)}}
+.field{display:flex;flex-direction:column;gap:5px;padding:0 6px;font-size:14px;font-weight:500}
+.field input{background:var(--sunk);border:1px solid var(--line);color:var(--ink);border-radius:var(--r-in2);padding:12px;font:400 16px var(--body);width:100%}
+.refs{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 6px}
+.ref{position:relative;width:60px;height:60px;border-radius:var(--r-in2);overflow:hidden;border:2px solid var(--line);padding:0;background:none;cursor:pointer}
+.ref[aria-pressed="true"]{border-color:var(--accent)}
+.ref img{width:100%;height:100%;object-fit:cover;display:block}
+.refx{border:0;background:none;color:var(--muted);font:500 12px var(--body);text-decoration:underline;cursor:pointer;padding:4px}
+.holdimg{max-width:100%;border-radius:var(--r-in2)}
+</style>
+</head>
+<body>
+<main id="setup">
+  <header class="top">
+    <h1>Car Shot Coach Live</h1>
+    <p>Aim at the car. It tells you where to move, which lens to use and when to shoot, then fixes the light.</p>
+  </header>
+
+  <section class="card" aria-labelledby="h-shot">
+    <h2 id="h-shot">Which shot <span id="savedCount" style="float:right;letter-spacing:0;text-transform:none;font-weight:500"></span></h2>
+    <div class="inner">
+      <div class="grp">Exterior</div><div class="chips" id="chipsExt"></div>
+      <div class="grp">Interior</div><div class="chips" id="chipsInt"></div>
+    </div>
+    <div class="brief">
+      <div id="plan" role="img" aria-label="Where to stand"></div>
+      <div><h3 id="briefTitle"></h3><ul id="briefTips"></ul></div>
+    </div>
+    <div class="row">
+      <span id="l-shape">Photo shape</span>
+      <div class="seg" role="group" aria-labelledby="l-shape" id="shapeSeg">
+        <button type="button" data-shape="tall">Tall</button>
+        <button type="button" data-shape="wide">Wide</button>
+        <button type="button" data-shape="asis">As shot</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <button class="btn primary" type="button" id="startBtn">Start camera</button>
+    <p class="err" id="startErr" role="alert" hidden></p>
+    <p class="fine">Safari will ask for the camera, and for motion so it can tell if the phone is level. Everything you see live stays on your phone.</p>
+    <div class="actions">
+      <button class="btn small" type="button" id="libBtn">Fix a photo from library</button>
+      <button class="btn small" type="button" id="setBtn">Settings</button>
+    </div>
+    <input class="sr" tabindex="-1" aria-hidden="true" type="file" id="libInput" accept="image/*">
+    <input class="sr" tabindex="-1" aria-hidden="true" type="file" id="refInput" accept="image/*" multiple>
+  </section>
+  <div class="foot"><button class="link" id="legalBtn" type="button">Privacy &amp; terms</button></div>
+</main>
+
+<div id="cam" hidden>
+  <video id="video" playsinline muted autoplay aria-label="Live camera view"></video>
+  <canvas id="ov" aria-hidden="true"></canvas>
+  <div class="camtop">
+    <button class="round" id="exitBtn" type="button" aria-label="Back to setup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <select id="shotSel" aria-label="Which shot"></select>
+    <button class="round" id="setBtn2" type="button" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></button>
+  </div>
+  <div class="cambottom">
+    <div class="status" id="status" aria-hidden="true"></div>
+    <div class="banner" id="liveBanner" role="status" aria-live="polite"><span class="ico" id="liveIco"></span><span id="liveText">Starting the camera</span></div>
+    <div class="controls">
+      <div class="lens" id="lensSeg" role="group" aria-label="Lens" hidden></div>
+      <button id="shutter" type="button" aria-label="Take photo" style="grid-column:2"></button>
+      <button id="autoBtn" type="button" aria-pressed="true" title="Shoot automatically when lined up">Auto</button>
+    </div>
+  </div>
+  <div id="flash"></div>
+</div>
+
+<dialog id="review" aria-labelledby="h-res">
+  <div class="dlg">
+    <h3 id="h-res">Your shot</h3>
+    <div class="stagewrap" id="stagewrap"><div class="stage">
+      <canvas id="view" role="img" aria-label="Your photo with the lighting fix applied"></canvas>
+      <svg id="overlay" aria-hidden="true"></svg>
+    </div></div>
+    <div class="busy" id="busy" hidden><span class="spin"></span><span id="busyText">Claude is checking the shot</span></div>
+    <div class="verdict" id="verdict" hidden>
+      <svg class="ring" viewBox="0 0 76 76" role="img" id="ring" aria-label="Score">
+        <circle cx="38" cy="38" r="32" fill="none" stroke="var(--line)" stroke-width="7"/>
+        <circle id="ringArc" cx="38" cy="38" r="32" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-dasharray="201" stroke-dashoffset="201" transform="rotate(-90 38 38)"/>
+        <text id="ringNum" x="38" y="47" text-anchor="middle">0</text>
+      </svg>
+      <div><span class="pill" id="pill"></span><h3 id="headline"></h3><p id="sub"></p></div>
+    </div>
+    <ul class="moves" id="moves"></ul>
+    <p class="note" id="lensNote" hidden></p>
+    <p class="note" id="refNote" hidden></p>
+    <p class="note" id="coachMsg" hidden></p>
+    <p class="note" id="lightNote"></p>
+    <div class="sliders">
+      <label class="sl" for="sB"><span>Brightness</span><input type="range" id="sB" min="-100" max="100" value="0"><output id="oB">0</output></label>
+      <label class="sl" for="sS"><span>Shadows</span><input type="range" id="sS" min="0" max="100" value="0"><output id="oS">0</output></label>
+      <label class="sl" for="sH"><span>Highlights</span><input type="range" id="sH" min="0" max="100" value="0"><output id="oH">0</output></label>
+    </div>
+    <div class="actions">
+      <button class="btn small" type="button" id="beforeBtn" aria-pressed="false">Show original</button>
+      <button class="btn small" type="button" id="resetBtn">Reset to auto</button>
+      <button class="btn small full" type="button" id="claudeBtn">Check with Claude</button>
+      <button class="btn" type="button" id="retakeBtn">Retake</button>
+      <button class="btn primary" type="button" id="saveBtn" style="grid-column:auto">Save</button>
+    </div>
+    <p class="fine" id="saveMsg" role="status"></p>
+  </div>
+</dialog>
+
+<dialog id="settings" aria-labelledby="setTitle">
+  <div class="dlg">
+    <h3 id="setTitle">Settings</h3>
+    <h2>Match a reference photo</h2>
+    <p class="fine">Add up to 3 car photos you like. Tap one to make it the target: a dashed outline in the live view shows where the car should sit to match it.</p>
+    <div class="refs" id="refs"><button class="btn small" type="button" id="refBtn">Add photo</button></div>
+    <h2>Claude check</h2>
+    <p class="fine">Optional. Paste your Claude API key to have Claude score each saved shot against listing-photo standards and your references. The key is kept only in this browser and is sent only to Anthropic. It is billed to your API account, not your Claude plan.</p>
+    <label class="field" for="keyIn">API key<input id="keyIn" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-..."></label>
+    <label class="field" for="modelIn">Model<input id="modelIn" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" list="modelList"><datalist id="modelList"></datalist></label>
+    <div class="actions">
+      <button class="btn small" type="button" id="keySave">Save and test key</button>
+      <button class="btn small" type="button" id="keyDel">Remove key</button>
+    </div>
+    <p class="fine" id="keyMsg" role="status"></p>
+    <button class="btn" type="button" id="setClose">Done</button>
+  </div>
+</dialog>
+
+<dialog id="legal" aria-labelledby="legalTitle">
+  <div class="dlg">
+    <h3 id="legalTitle">Privacy &amp; terms</h3>
+    <section><h4>Privacy</h4><p>The live camera view, motion readings and photos are processed on your phone and are not uploaded. No accounts, analytics or ads. The one exception is the optional Claude check: when you tap it, that photo and your reference photos go straight from your phone to Anthropic's API using your own key. Saved photos carry no location or other metadata.</p></section>
+    <section><h4>Third parties</h4><p>Three, each for one purpose: jsDelivr serves the open-source TensorFlow.js code that finds the car, Google Cloud Storage serves that model's file, and Anthropic answers the Claude check if you turn it on. No other SDKs or trackers.</p></section>
+    <section><h4>Cookies and storage</h4><p>No cookies. Your shape and auto-shoot choices, and your API key if you add one, are kept in this browser's local storage so the tool works next time. Nothing optional is stored, so there is no consent banner.</p></section>
+    <section><h4>Terms of use</h4><p>The coaching is guidance, not a guarantee of a sale or a price. The lighting fix changes exposure only. Do not use edits to hide damage or misdescribe a vehicle; you are responsible for what your listing shows. Watch your surroundings while you move around the car.</p></section>
+    <section><h4>Price and refunds</h4><p>This tool is free, with no fees and nothing to refund. The optional Claude check is billed by Anthropic to your own API account.</p></section>
+    <section><h4>Delete your data</h4><p>Photos live in this tab until you close it. The button below wipes them along with your saved settings and API key.</p><p style="margin-top:8px"><button class="btn small" type="button" id="wipeBtn">Delete everything now</button></p></section>
+    <section><h4>Children</h4><p>Not directed at children under 13 and collects no personal data from anyone.</p></section>
+    <section><h4>Email</h4><p>This tool sends no email, so there is nothing to unsubscribe from.</p></section>
+    <section><h4>Accessibility</h4><p>Works with a keyboard and screen reader, and each live instruction is announced. Tell the operator if something is hard to use.</p></section>
+    <section><h4>Operator and licences</h4><p>Operated by Marawan Ahmed. Uses TensorFlow.js and the COCO-SSD model under the Apache 2.0 licence. Text is set in your device's own fonts. Diagrams and icons were drawn for this page.</p></section>
+    <button class="btn" type="button" id="legalClose">Close</button>
+  </div>
+</dialog>
+
+<dialog id="holdDlg" aria-labelledby="holdTitle">
+  <div class="dlg">
+    <h3 id="holdTitle">Press and hold to save</h3>
+    <img class="holdimg" id="holdImg" alt="Your corrected car photo">
+    <p class="fine">Press and hold the photo, then choose Save to Photos.</p>
+    <button class="btn" type="button" id="holdClose">Done</button>
+  </div>
+</dialog>
+
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id)};
+var TFJS="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js";
+var COCO="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js";
+var API="https://api.anthropic.com/v1/";
+
+var SHOTS=[
+ {id:"front-corner",label:"Front corner",ext:true,ang:-38,dist:1,tp:.86,tl:.66,asp:1.9,stand:"Off the headlight, so the grille and one full side both show.",height:"Headlight to mirror height, about your waist to chest.",lens:"1x. Use the longer lens if you can back up."},
+ {id:"side",label:"Side",ext:true,ang:-90,dist:1.1,tp:.9,tl:.84,asp:3.1,stand:"Square to the middle of the car, lined up with the gap between the doors.",height:"Door-handle height, phone level.",lens:"1x from 20 feet or more. Not 0.5x."},
+ {id:"rear-corner",label:"Rear corner",ext:true,ang:-142,dist:1,tp:.86,tl:.66,asp:1.9,stand:"Off the taillight, so the trunk and one full side both show.",height:"Taillight height, about your waist.",lens:"1x. Use the longer lens if you can back up."},
+ {id:"front",label:"Front",ext:true,ang:0,dist:1,tp:.72,tl:.46,asp:1.3,stand:"Dead center on the badge.",height:"Headlight height. Crouch a little.",lens:"1x or the longer lens."},
+ {id:"rear",label:"Rear",ext:true,ang:180,dist:1,tp:.72,tl:.46,asp:1.3,stand:"Dead center on the trunk badge.",height:"Taillight height.",lens:"1x or the longer lens."},
+ {id:"wheel",label:"Wheel",ext:false,ang:-62,dist:.5,stand:"Crouch square to the wheel so it fills most of the frame.",height:"Hub height.",lens:"1x."},
+ {id:"dash",label:"Dash",ext:false,wide:true,ang:-90,dist:.36,stand:"At the open driver door, or centered in the back seat, aimed across the whole dash.",height:"Seat-shoulder height.",lens:"0.5x. It fits the full dash."},
+ {id:"front-seats",label:"Front seats",ext:false,wide:true,ang:90,dist:.4,stand:"At the open passenger door, aimed across both seats.",height:"Seat-cushion to shoulder height.",lens:"0.5x."},
+ {id:"rear-seats",label:"Rear seats",ext:false,wide:true,ang:-112,dist:.42,stand:"At the open rear door, aimed across the bench.",height:"Seat-shoulder height.",lens:"0.5x."},
+ {id:"odometer",label:"Odometer",ext:false,ang:-78,dist:.2,stand:"Ignition on. Fill the frame with the gauge cluster, mileage readable.",height:"Straight on through the wheel.",lens:"1x. Tap the screen glare away by shifting a few inches."},
+ {id:"screen",label:"Center screen",ext:false,ang:-90,dist:.12,stand:"From the driver seat, square to the screen and center stack.",height:"Level with the screen.",lens:"1x."},
+ {id:"trunk",label:"Trunk",ext:false,ang:180,dist:.8,stand:"Trunk open. Stand back so the whole opening shows.",height:"Chest height, aimed slightly down.",lens:"1x."}
+];
+var EXT=SHOTS.filter(function(s){return s.ext}),INT=SHOTS.filter(function(s){return !s.ext});
+var ICON={
+ up:'<path d="M12 19V5M5 12l7-7 7 7"/>',
+ dist:'<path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"/>',
+ tilt:'<path d="M5 15a7 7 0 0 1 14 0M19 15l-3.5-1.5M19 15l1.5-3.5"/>',
+ lens:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>',
+ light:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
+ ok:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+ dot:'<circle cx="12" cy="12" r="3"/>'
+};
+function icon(kind){
+  var rot={up:0,right:90,down:180,left:270}[kind];
+  var body=rot!==undefined?ICON.up:(kind==="back"||kind==="closer")?ICON.dist:(ICON[kind]||ICON.dot);
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"'+(rot?' style="transform:rotate('+rot+'deg)"':'')+' aria-hidden="true">'+body+'</svg>';
+}
+function store(k,v){try{if(v===undefined)return localStorage.getItem("csc_"+k);if(v===null)localStorage.removeItem("csc_"+k);else localStorage.setItem("csc_"+k,v)}catch(e){}return null}
+
+var S={shot:SHOTS[0],shape:store("shape")||"tall",auto:store("auto")!=="0",refs:[],refActive:-1,saved:{},photo:null,params:{b:0,s:0,h:0,c:.05},autoP:null,before:false,advice:null,gen:0,ctl:null,raf:0,count:0};
+var L={on:false,stream:null,model:null,modelState:"idle",box:null,boxAt:0,G:null,roll:0,pitch:0,rot:0,light:null,lenses:[],lens:null,readySince:0,lastShot:0,paused:false,said:"",saidAt:0};
+var video=$("video"),isIOS=typeof DeviceMotionEvent!=="undefined"&&typeof DeviceMotionEvent.requestPermission==="function";
+
+/* ---------- setup screen ---------- */
+function plan(shot){
+  var cx=52,cy=56,r=36*shot.dist,a=(shot.ang-90)*Math.PI/180;
+  var px=cx+r*Math.cos(a),py=cy+r*Math.sin(a);
+  var toC=Math.atan2(cy-py,cx-px),sp=.42,len=shot.ext?r+6:16;
+  if(shot.id==="trunk")toC=-Math.PI/2;
+  function ray(d){return (px+len*Math.cos(toC+d)).toFixed(1)+","+(py+len*Math.sin(toC+d)).toFixed(1)}
+  return '<svg viewBox="0 0 104 108">'
+   +'<rect x="39" y="27" width="26" height="58" rx="9" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"/>'
+   +'<rect x="43" y="40" width="18" height="9" rx="3" fill="var(--ink)" opacity=".5"/>'
+   +'<rect x="43" y="68" width="18" height="6" rx="2.5" fill="var(--ink)" opacity=".28"/>'
+   +'<polygon points="'+px.toFixed(1)+','+py.toFixed(1)+' '+ray(-sp)+' '+ray(sp)+'" fill="var(--accent)" opacity=".35"/>'
+   +'<text x="52" y="9" text-anchor="middle" font-size="8" font-weight="600" fill="var(--muted)" font-family="var(--body)">FRONT</text>'
+   +'<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="5.5" fill="var(--accent)" stroke="var(--bg)" stroke-width="2"/></svg>';
+}
+function chipsInto(el,list){
+  el.innerHTML="";
+  list.forEach(function(sh){
+    var b=document.createElement("button");b.type="button";b.className="chip"+(S.saved[sh.id]?" saved":"");
+    b.setAttribute("aria-pressed",String(sh===S.shot));
+    b.innerHTML='<span class="tick" aria-hidden="true">✓</span>'+sh.label+(S.saved[sh.id]?'<span class="sr"> saved</span>':'');
+    b.onclick=function(){setShot(sh)};el.appendChild(b);
+  });
+}
+function drawSetup(){
+  chipsInto($("chipsExt"),EXT);chipsInto($("chipsInt"),INT);
+  $("plan").innerHTML=plan(S.shot);
+  $("plan").setAttribute("aria-label","Top-down diagram: where to stand for the "+S.shot.label.toLowerCase()+" shot");
+  $("briefTitle").textContent=S.shot.label;
+  $("briefTips").innerHTML="<li><b>Stand</b><span>"+S.shot.stand+"</span></li><li><b>Height</b><span>"+S.shot.height+"</span></li><li><b>Lens</b><span>"+S.shot.lens+"</span></li>";
+  $("savedCount").textContent=Object.keys(S.saved).length+" of "+SHOTS.length+" saved";
+  [].forEach.call($("shapeSeg").children,function(x){x.setAttribute("aria-pressed",String(x.dataset.shape===S.shape))});
+  var sel=$("shotSel");sel.innerHTML="";
+  [["Exterior",EXT],["Interior",INT]].forEach(function(g){
+    var og=document.createElement("optgroup");og.label=g[0];
+    g[1].forEach(function(sh){var o=document.createElement("option");o.value=sh.id;o.textContent=(S.saved[sh.id]?"✓ ":"")+sh.label;if(sh===S.shot)o.selected=true;og.appendChild(o)});
+    sel.appendChild(og);
+  });
+}
+function setShot(sh){S.shot=sh;L.box=null;L.readySince=0;drawSetup()}
+$("shotSel").addEventListener("change",function(){var id=this.value;setShot(SHOTS.filter(function(s){return s.id===id})[0]||SHOTS[0])});
+$("shapeSeg").addEventListener("click",function(e){
+  var b=e.target.closest("button");if(!b)return;S.shape=b.dataset.shape;store("shape",S.shape);drawSetup();if(S.photo&&$("review").open)render();
+});
+
+/* ---------- image helpers ---------- */
+function loadBitmap(blob){
+  if(window.createImageBitmap)return createImageBitmap(blob,{imageOrientation:"from-image"}).catch(function(){return createImageBitmap(blob)}).catch(function(){return viaImg(blob)});
+  return viaImg(blob);
+}
+function viaImg(blob){return new Promise(function(res,rej){
+  var u=URL.createObjectURL(blob),im=new Image();
+  im.onload=function(){URL.revokeObjectURL(u);res(im)};
+  im.onerror=function(){URL.revokeObjectURL(u);rej(new Error("That file could not be opened as a photo."))};im.src=u;
+})}
+function toCanvas(src,maxSide){
+  var w=src.videoWidth||src.naturalWidth||src.width,h=src.videoHeight||src.naturalHeight||src.height,k=Math.min(1,maxSide/Math.max(w,h));
+  var c=document.createElement("canvas");c.width=Math.max(1,Math.round(w*k));c.height=Math.max(1,Math.round(h*k));
+  c.getContext("2d",{willReadFrequently:true}).drawImage(src,0,0,c.width,c.height);return c;
+}
+function canvasBlob(c,q){return new Promise(function(res,rej){c.toBlob(function(b){b?res(b):rej(new Error("Could not encode the photo."))},"image/jpeg",q||.85)})}
+function b64(blob){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(String(r.result).split(",")[1])};r.onerror=rej;r.readAsDataURL(blob)})}
+
+/* ---------- light measurement and fix ---------- */
+function measure(c,maxSide){
+  var k=Math.min(1,(maxSide||320)/Math.max(c.width,c.height)),w=Math.max(1,Math.round(c.width*k)),h=Math.max(1,Math.round(c.height*k));
+  var t=measure.t||(measure.t=document.createElement("canvas"));t.width=w;t.height=h;
+  var x=t.getContext("2d",{willReadFrequently:true});x.drawImage(c,0,0,w,h);
+  var d=x.getImageData(0,0,w,h).data,Lm=new Uint8Array(w*h),lo=0,hi=0,sum=0;
+  for(var i=0,j=0;i<d.length;i+=4,j++){var l=(d[i]*54+d[i+1]*183+d[i+2]*19)>>8;Lm[j]=l;sum+=l;if(l<10)lo++;else if(l>245)hi++}
+  return {w:w,h:h,L:Lm,mean:sum/Lm.length/255,clipLo:lo/Lm.length*100,clipHi:hi/Lm.length*100,p95:pct(hist(Lm,0,0,w,h,w),.95)};
+}
+function hist(Lm,x0,y0,x1,y1,w){var H=new Uint32Array(257),n=0;for(var y=y0;y<y1;y++)for(var x=x0;x<x1;x++){H[Lm[y*w+x]]++;n++}H[256]=n;return H}
+function pct(H,p){var n=H[256]*p,a=0;for(var i=0;i<256;i++){a+=H[i];if(a>=n)return i/255}return 1}
+function regionStats(m,box){
+  var x0=Math.max(0,Math.floor((box.x+box.w*.1)*m.w)),y0=Math.max(0,Math.floor((box.y+box.h*.1)*m.h));
+  var x1=Math.min(m.w,Math.max(x0+1,Math.ceil((box.x+box.w*.9)*m.w))),y1=Math.min(m.h,Math.max(y0+1,Math.ceil((box.y+box.h*.9)*m.h)));
+  var H=hist(m.L,x0,y0,x1,y1,m.w);return {med:pct(H,.5),p10:pct(H,.1)};
+}
+function autoParams(m,box,interior){
+  var st=regionStats(m,box),b=0,lowT=interior?.36:.30;
+  if(st.med<lowT){var g=Math.log(lowT)/Math.log(Math.max(.03,st.med));b=Math.round(-Math.log2(Math.max(.5,g))*100*.75)}
+  else if(st.med>.78){var g2=Math.log(.70)/Math.log(Math.min(.97,st.med));b=Math.round(-Math.log2(Math.min(1.6,g2))*100*.75)}
+  if(Math.abs(b)<6)b=0;
+  var s=Math.round(Math.max(0,Math.min(70,(.14-st.p10)/.14*70)));
+  var h=Math.round(Math.max(0,Math.min(75,m.clipHi*5+(b>0?b*.5:0)+(m.p95>.92?15:0))));
+  return {b:b,s:s,h:h,c:.05};
+}
+function ratioLUT(p){
+  var gamma=Math.pow(2,-p.b/100),sh=p.s/100,hi=p.h/100,c=p.c||0,lut=new Float32Array(256);
+  for(var i=0;i<256;i++){
+    var x=i/255,g=Math.pow(x,gamma);
+    g+=sh*.45*Math.pow(1-g,3)*Math.sqrt(g);
+    g-=hi*.35*Math.pow(g,3)*Math.sqrt(Math.max(0,1-g));
+    g=.5+(g-.5)*(1+c);g=Math.min(1,Math.max(0,g));
+    lut[i]=i?Math.min(4,g*255/i):1;
+  }
+  return lut;
+}
+function tone(ctx,w,h,p){
+  var id=ctx.getImageData(0,0,w,h),d=id.data,lut=ratioLUT(p);
+  for(var i=0;i<d.length;i+=4){var k=lut[(d[i]*54+d[i+1]*183+d[i+2]*19)>>8];d[i]*=k;d[i+1]*=k;d[i+2]*=k}
+  ctx.putImageData(id,0,0);
+}
+
+/* ---------- car finder (on device) ---------- */
+function loadScript(src){return new Promise(function(res,rej){var s=document.createElement("script");s.src=src;s.onload=res;s.onerror=function(){rej(new Error("load"))};document.head.appendChild(s)})}
+function loadModel(){
+  if(L.modelState!=="idle")return;L.modelState="loading";
+  loadScript(TFJS).then(function(){return loadScript(COCO)}).then(function(){return window.cocoSsd.load({base:"lite_mobilenet_v2"})})
+   .then(function(m){L.model=m;L.modelState="ready";S.refs.forEach(findRefBox)}).catch(function(){L.modelState="failed"});
+}
+function bestCar(preds,w,h){
+  var best=null;
+  (preds||[]).forEach(function(p){
+    if(p["class"]!=="car"&&p["class"]!=="truck"&&p["class"]!=="bus")return;
+    var a=p.bbox[2]*p.bbox[3];if(!best||a>best.a)best={a:a,x:p.bbox[0]/w,y:p.bbox[1]/h,w:p.bbox[2]/w,h:p.bbox[3]/h};
+  });
+  if(!best)return null;
+  best.x=Math.max(0,best.x);best.y=Math.max(0,best.y);best.w=Math.min(1-best.x,best.w);best.h=Math.min(1-best.y,best.h);return best;
+}
+function detectLoop(){
+  if(!L.on)return;
+  if(L.model&&!L.paused&&S.shot.ext&&video.readyState>=2&&video.videoWidth){
+    L.model.detect(video,8,.3).then(function(preds){
+      var b=bestCar(preds,video.videoWidth,video.videoHeight),now=performance.now();
+      if(b){
+        if(L.box&&now-L.boxAt<800){var k=.45;L.box={x:L.box.x+(b.x-L.box.x)*k,y:L.box.y+(b.y-L.box.y)*k,w:L.box.w+(b.w-L.box.w)*k,h:L.box.h+(b.h-L.box.h)*k}}else L.box=b;
+        L.boxAt=now;
+      }
+    }).catch(function(){}).then(function(){setTimeout(detectLoop,50)});
+  }else setTimeout(detectLoop,250);
+}
+function lightLoop(){
+  if(!L.on)return;
+  if(!L.paused&&video.readyState>=2&&video.videoWidth){
+    try{var m=measure(video,160);L.light={m:m,car:(S.shot.ext&&freshBox())?regionStats(m,L.box):null}}catch(e){}
+  }
+  setTimeout(lightLoop,450);
+}
+function freshBox(){return L.box&&performance.now()-L.boxAt<1200?L.box:null}
+
+/* ---------- motion: level, pitch, steadiness ---------- */
+function onMotion(e){
+  var g=e.accelerationIncludingGravity;if(!g||g.x===null)return;
+  var s=isIOS?-1:1,x=g.x*s,y=g.y*s,z=g.z*s;
+  if(!L.G)L.G={x:x,y:y,z:z};else{L.G.x+=(x-L.G.x)*.2;L.G.y+=(y-L.G.y)*.2;L.G.z+=(z-L.G.z)*.2}
+  var a=Math.atan2(L.G.x,L.G.y)*180/Math.PI,d=((a%90)+90)%90;if(d>45)d-=90;L.roll=d;
+  L.pitch=Math.atan2(L.G.z,Math.sqrt(L.G.x*L.G.x+L.G.y*L.G.y))*180/Math.PI;
+  var r=e.rotationRate;if(r&&r.alpha!==null){var mag=Math.sqrt(r.alpha*r.alpha+r.beta*r.beta+r.gamma*r.gamma);L.rot+=(mag-L.rot)*.25}
+}
+function askMotion(){
+  if(typeof DeviceMotionEvent==="undefined")return Promise.resolve();
+  var p=isIOS?DeviceMotionEvent.requestPermission().catch(function(){return "denied"}):Promise.resolve("granted");
+  return p.then(function(r){if(r==="granted")window.addEventListener("devicemotion",onMotion)});
+}
+
+/* ---------- camera ---------- */
+function openStream(deviceId){
+  var v={width:{ideal:3840},height:{ideal:2160}};
+  if(deviceId)v.deviceId={exact:deviceId};else v.facingMode={ideal:"environment"};
+  return navigator.mediaDevices.getUserMedia({audio:false,video:v}).then(function(st){
+    if(L.stream)L.stream.getTracks().forEach(function(t){t.stop()});
+    L.stream=st;video.srcObject=st;return video.play().catch(function(){});
+  });
+}
+function findLenses(){
+  return navigator.mediaDevices.enumerateDevices().then(function(ds){
+    var out=[];
+    ds.forEach(function(d){
+      if(d.kind!=="videoinput")return;var l=d.label||"";
+      if(/front|user|face|selfie/i.test(l))return;
+      var name=/ultra/i.test(l)?"0.5x":/tele/i.test(l)?"Tele":/dual|triple/i.test(l)?null:/back|rear|environment/i.test(l)?"1x":null;
+      if(name&&!out.some(function(o){return o.name===name}))out.push({name:name,id:d.deviceId});
+    });
+    var order={"0.5x":0,"1x":1,"Tele":2};out.sort(function(a,b){return order[a.name]-order[b.name]});
+    L.lenses=out;
+    var tr=L.stream&&L.stream.getVideoTracks()[0],cur=tr&&tr.getSettings?tr.getSettings().deviceId:null,hit=out.filter(function(o){return o.id===cur})[0];
+    L.lens=hit?hit.name:null;drawLenses();
+  }).catch(function(){});
+}
+function drawLenses(){
+  var el=$("lensSeg");el.innerHTML="";el.hidden=L.lenses.length<2;
+  L.lenses.forEach(function(o){
+    var b=document.createElement("button");b.type="button";b.textContent=o.name;b.setAttribute("aria-pressed",String(o.name===L.lens));
+    b.onclick=function(){openStream(o.id).then(function(){L.lens=o.name;L.box=null;drawLenses()}).catch(function(){})};
+    el.appendChild(b);
+  });
+}
+function hasLens(n){return L.lenses.some(function(o){return o.name===n})}
+function startCamera(){
+  var err=$("startErr");err.hidden=true;
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){err.hidden=false;err.textContent="This page needs to be opened from an https address in Safari or Chrome to use the camera.";return}
+  $("startBtn").disabled=true;
+  var motion=askMotion();
+  openStream(null).then(function(){return motion}).then(function(){
+    $("cam").hidden=false;$("setup").hidden=true;L.on=true;L.paused=false;L.readySince=0;
+    loadModel();findLenses();detectLoop();lightLoop();requestAnimationFrame(frame);
+  }).catch(function(e){
+    err.hidden=false;
+    err.textContent=e&&e.name==="NotAllowedError"?"Camera access was blocked. Allow the camera for this site in your browser settings, then reload.":e&&e.name==="NotFoundError"?"No camera was found on this device.":"The camera could not start. Close other apps using it and try again.";
+  }).then(function(){$("startBtn").disabled=false});
+}
+function stopCamera(){
+  L.on=false;if(L.stream)L.stream.getTracks().forEach(function(t){t.stop()});L.stream=null;video.srcObject=null;
+  $("cam").hidden=true;$("setup").hidden=false;drawSetup();
+}
+
+/* ---------- live guidance ---------- */
+function target(portrait){
+  var r=S.refs[S.refActive];
+  if(r&&r.box)return {w:r.box.w,h:r.box.h,cx:r.box.x+r.box.w/2,cy:r.box.y+r.box.h/2};
+  var w=portrait?S.shot.tp:S.shot.tl,vw=video.videoWidth,vh=video.videoHeight;
+  return {w:w,h:Math.min(.8,w*vw/S.shot.asp/vh),cx:.5,cy:.55};
+}
+function guide(){
+  var vw=video.videoWidth,vh=video.videoHeight,sh=S.shot,out=null;
+  var chips={Frame:"na",Level:"na",Height:"na",Light:"na",Steady:"na"};
+  function say(kind,text){if(!out)out={kind:kind,text:text}}
+  if(!vw)return {kind:"dot",text:"Starting the camera",chips:chips,ready:false,tgt:null};
+  var portrait=vh>=vw,tgt=null;
+  if(S.shape==="tall"&&!portrait)say("tilt","Turn the phone upright");
+  if(S.shape==="wide"&&portrait)say("tilt","Turn the phone sideways");
+  if(sh.ext){
+    if(L.modelState==="ready"){
+      var b=freshBox();tgt=target(portrait);
+      if(!b){chips.Frame="bad";say("dot","Point the camera at the whole car")}
+      else{
+        var e=.012,cl=b.x<e,cr=b.x+b.w>1-e,ct=b.y<e,cb=b.y+b.h>1-e,ok=false,cx=b.x+b.w/2,cy=b.y+b.h/2;
+        if((cl&&cr)||(ct&&cb)||b.w>.96)say("back",hasLens("0.5x")&&L.lens==="1x"?"Step back. No room? Use 0.5x":"Step back until the whole car fits");
+        else if(cl)say("left","Aim left. The car is cut off");
+        else if(cr)say("right","Aim right. The car is cut off");
+        else if(ct)say("up","Aim up. The roof is cut off");
+        else if(cb)say("down","Aim down. The wheels are cut off");
+        else if(b.w<tgt.w-.10)say("closer",b.w<tgt.w*.55&&hasLens("Tele")&&L.lens!=="Tele"?"Step closer, or switch to Tele":"Step closer to fill the frame");
+        else if(b.w>tgt.w+.06)say("back","Step back a little");
+        else if(cx<tgt.cx-.06)say("left","Aim a little left");
+        else if(cx>tgt.cx+.06)say("right","Aim a little right");
+        else if(cy<tgt.cy-.09)say("up","Aim a little higher");
+        else if(cy>tgt.cy+.09)say("down","Aim a little lower");
+        else ok=true;
+        chips.Frame=ok?"ok":"bad";
+      }
+    }
+    if(L.lens==="0.5x")say("lens","0.5x stretches the car. Switch to 1x");
+  }else if(sh.wide&&L.lens&&L.lens!=="0.5x"&&hasLens("0.5x"))say("lens","Switch to 0.5x to fit the whole cabin");
+  if(L.G){
+    if(sh.ext){
+      if(L.pitch>10){chips.Height="bad";say("down","Lower the phone, then aim level")}
+      else if(L.pitch<-8){chips.Height="bad";say("up","Raise the phone, then aim level")}
+      else chips.Height="ok";
+    }
+    if(sh.id!=="trunk"&&sh.id!=="wheel"&&sh.id!=="odometer"){
+      chips.Level=Math.abs(L.roll)<=2?"ok":"bad";if(chips.Level==="bad")say("tilt","Level the phone");
+    }
+  }
+  var li=L.light;
+  if(li){
+    var okL=true;
+    if(sh.ext){
+      if(li.car&&li.car.med<.13&&li.m.p95>.9&&li.m.mean-li.car.med>.28){okL=false;say("light","The car is a silhouette. Put the sun behind you")}
+      else if(li.m.clipHi>30){okL=false;say("light","Too much glare. Change your angle to the sun")}
+    }else{
+      if(li.m.mean<.12){okL=false;say("light","Too dark. Open the doors or turn on the dome light")}
+      else if(li.m.clipHi>24){okL=false;say("light","The windows are blowing out. Aim lower or find shade")}
+    }
+    chips.Light=okL?"ok":"bad";
+  }
+  if(L.G){chips.Steady=L.rot<(sh.ext?12:7)?"ok":"bad";if(chips.Steady==="bad")say("dot","Hold still")}
+  if(out){out.chips=chips;out.ready=false;out.tgt=tgt;return out}
+  var txt=sh.ext&&L.modelState==="loading"?"Loading the car finder. Frame it by eye for now":sh.ext&&L.modelState==="failed"?"Car finder did not load. Frame it by eye":"Lined up. Hold still";
+  return {kind:"ok",text:txt,chips:chips,ready:!(sh.ext&&L.modelState!=="ready"),tgt:tgt};
+}
+function frame(){
+  if(!L.on)return;
+  requestAnimationFrame(frame);
+  if(L.paused)return;
+  var g=guide(),now=performance.now(),cam=$("cam"),ov=$("ov"),vw=video.videoWidth,vh=video.videoHeight;
+  if(g.text!==L.said&&(now-L.saidAt>350||g.kind==="ok")){
+    L.said=g.text;L.saidAt=now;
+    $("liveText").textContent=g.text;$("liveIco").innerHTML=icon(g.kind);$("liveBanner").className="banner"+(g.kind==="ok"?" ok":"");
+    var st=$("status");st.innerHTML="";
+    Object.keys(g.chips).forEach(function(k){if(g.chips[k]==="na"&&(k==="Frame"||k==="Height")&&!S.shot.ext)return;var s=document.createElement("span");s.className="st "+(g.chips[k]==="na"?"":g.chips[k]);s.innerHTML="<i></i>"+k;st.appendChild(s)});
+  }
+  $("shutter").classList.toggle("ready",g.ready);
+  if(g.ready){if(!L.readySince)L.readySince=now;if(S.auto&&now-L.readySince>900&&now-L.lastShot>3500)capture()}else L.readySince=0;
+  if(!vw)return;
+  var cw=cam.clientWidth,ch=cam.clientHeight,sc=Math.min(cw/vw,ch/vh),w=vw*sc,h=vh*sc,dpr=Math.min(2,window.devicePixelRatio||1);
+  if(ov.width!==Math.round(w*dpr)||ov.height!==Math.round(h*dpr)){ov.width=Math.round(w*dpr);ov.height=Math.round(h*dpr);ov.style.width=w+"px";ov.style.height=h+"px"}
+  ov.style.left=(cw-w)/2+"px";ov.style.top=(ch-h)/2+"px";
+  var c=ov.getContext("2d");c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,w,h);c.lineCap="round";c.lineJoin="round";
+  if(g.tgt){
+    var t=g.tgt;c.setLineDash([8,8]);c.lineWidth=2;c.strokeStyle="rgba(255,255,255,.55)";
+    c.strokeRect((t.cx-t.w/2)*w,(t.cy-t.h/2)*h,t.w*w,t.h*h);c.setLineDash([]);
+  }
+  var b=S.shot.ext?freshBox():null;
+  if(b){
+    var x=b.x*w,y=b.y*h,bw=b.w*w,bh=b.h*h,l=Math.min(bw,bh)*.16;
+    c.lineWidth=4;c.strokeStyle=g.chips.Frame==="ok"?"#49C47E":"#F5B21A";c.beginPath();
+    c.moveTo(x,y+l);c.lineTo(x,y);c.lineTo(x+l,y);c.moveTo(x+bw-l,y);c.lineTo(x+bw,y);c.lineTo(x+bw,y+l);
+    c.moveTo(x+bw,y+bh-l);c.lineTo(x+bw,y+bh);c.lineTo(x+bw-l,y+bh);c.moveTo(x+l,y+bh);c.lineTo(x,y+bh);c.lineTo(x,y+bh-l);c.stroke();
+  }
+  if(L.G&&g.chips.Level!=="na"){
+    var len=Math.min(w,h)*.17;c.save();c.translate(w/2,h/2);
+    c.lineWidth=2;c.strokeStyle="rgba(255,255,255,.6)";c.beginPath();c.moveTo(-len-26,0);c.lineTo(-len-6,0);c.moveTo(len+6,0);c.lineTo(len+26,0);c.stroke();
+    c.rotate(L.roll*Math.PI/180);c.lineWidth=3;c.strokeStyle=Math.abs(L.roll)<=2?"#49C47E":"#F5B21A";c.beginPath();c.moveTo(-len,0);c.lineTo(len,0);c.stroke();c.restore();
+  }
+}
+function capture(){
+  if(!video.videoWidth||L.paused)return;
+  L.lastShot=performance.now();L.readySince=0;
+  var src=toCanvas(video,4096),box=S.shot.ext?freshBox():null;
+  var fl=$("flash");fl.classList.add("on");setTimeout(function(){fl.classList.remove("on")},60);
+  openReview(src,box?{x:box.x,y:box.y,w:box.w,h:box.h}:null,L.lens);
+}
+
+/* ---------- review ---------- */
+function openReview(src,box,lens){
+  S.gen++;if(S.ctl)S.ctl.abort();L.paused=true;
+  var m=measure(src,320);
+  S.photo={src:src,m:m,lens:lens||null,crop:null,shot:S.shot};S.advice={box:box};S.before=false;
+  S.autoP=autoParams(m,box||{x:.12,y:.2,w:.76,h:.62},!S.shot.ext);
+  S.params={b:S.autoP.b,s:S.autoP.s,h:S.autoP.h,c:.05};
+  $("verdict").hidden=true;$("moves").innerHTML="";$("saveMsg").textContent="";setBusy(null);
+  ["lensNote","refNote","coachMsg"].forEach(function(i){$(i).hidden=true});
+  $("beforeBtn").setAttribute("aria-pressed","false");$("beforeBtn").textContent="Show original";
+  $("claudeBtn").textContent=store("key")?"Check with Claude":"Add a Claude key to score this shot";
+  $("h-res").textContent=S.shot.label;
+  if(!$("review").open)$("review").showModal();
+  setSliders();render();
+}
+function closeReview(){if($("review").open)$("review").close()}
+$("review").addEventListener("close",function(){S.gen++;if(S.ctl)S.ctl.abort();L.paused=false;L.lastShot=performance.now();L.said=""});
+function cropRect(){
+  var W=S.photo.src.width,H=S.photo.src.height,r={x:0,y:0,w:W,h:H,fail:false,cropped:false};
+  if(S.shape==="asis")return r;
+  var a=S.shape==="tall"?3/4:4/3;
+  if(Math.abs(W/H-a)<.02)return r;
+  var cw=Math.min(W,H*a),ch=cw/a,box=S.advice&&S.advice.box,cx=.5,cy=.5;
+  if((W>H)!==(a>1)){if(!box)return r}
+  if(box){if(box.w*W>cw*.98||box.h*H>ch*.98){r.fail=true;return r}cx=box.x+box.w/2;cy=box.y+box.h/2}
+  r.w=Math.round(cw);r.h=Math.round(ch);
+  r.x=Math.round(Math.min(W-cw,Math.max(0,cx*W-cw/2)));r.y=Math.round(Math.min(H-ch,Math.max(0,cy*H-ch/2)));r.cropped=true;return r;
+}
+function render(){
+  if(!S.photo)return;
+  var r=cropRect(),k=Math.min(1,900/Math.max(r.w,r.h)),cv=$("view");
+  cv.width=Math.round(r.w*k);cv.height=Math.round(r.h*k);
+  var ctx=cv.getContext("2d",{willReadFrequently:true});
+  ctx.drawImage(S.photo.src,r.x,r.y,r.w,r.h,0,0,cv.width,cv.height);
+  if(!S.before)tone(ctx,cv.width,cv.height,S.params);
+  var availW=Math.max(120,$("stagewrap").clientWidth-12),maxH=Math.max(220,window.innerHeight*.46),f=Math.min(availW/cv.width,maxH/cv.height);
+  cv.style.width=Math.round(cv.width*f)+"px";cv.style.height=Math.round(cv.height*f)+"px";
+  cv.setAttribute("aria-label",S.before?"Your original photo":"Your photo with the lighting fix applied");
+  var ov=$("overlay"),box=S.advice&&S.advice.box;ov.setAttribute("viewBox","0 0 "+r.w+" "+r.h);
+  if(box&&!S.before){
+    var W=S.photo.src.width,H=S.photo.src.height,x=box.x*W-r.x,y=box.y*H-r.y,w=box.w*W,h=box.h*H,l=Math.min(w,h)*.14,sw=Math.max(r.w,r.h)/260;
+    var p=function(a,b,c,d,e,g){return "M"+a+" "+b+"L"+c+" "+d+"L"+e+" "+g};
+    ov.innerHTML='<path fill="none" stroke="#F5B21A" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round" d="'+p(x,y+l,x,y,x+l,y)+p(x+w-l,y,x+w,y,x+w,y+l)+p(x+w,y+h-l,x+w,y+h,x+w-l,y+h)+p(x+l,y+h,x,y+h,x,y+h-l)+'"/>';
+  }else ov.innerHTML="";
+  S.photo.crop=r;drawLightNote();
+}
+function schedule(){if(S.raf)return;S.raf=requestAnimationFrame(function(){S.raf=0;render()})}
+function setSliders(){
+  $("sB").value=S.params.b;$("sS").value=S.params.s;$("sH").value=S.params.h;
+  $("oB").textContent=(S.params.b>0?"+":"")+S.params.b;$("oS").textContent=S.params.s;$("oH").textContent=S.params.h;
+}
+["sB","sS","sH"].forEach(function(id){$(id).addEventListener("input",function(){S.params.b=+$("sB").value;S.params.s=+$("sS").value;S.params.h=+$("sH").value;setSliders();schedule()})});
+function drawLightNote(){
+  var a=S.autoP,m=S.photo.m,parts=[],what=S.photo.shot.ext?"the car":"the cabin";
+  if(a.b>0)parts.push("brightened "+what+" about "+(a.b/100).toFixed(1)+" stops");else if(a.b<0)parts.push("pulled "+what+" down about "+(-a.b/100).toFixed(1)+" stops");
+  if(a.s>12)parts.push("opened the shadows");if(a.h>12)parts.push(S.photo.shot.ext?"held back the bright sky":"held back the windows");
+  var t=parts.length?"<b>Light fix:</b> "+parts.join(", ")+".":"<b>Exposure looks right.</b> No fix was needed.";
+  if(m.clipHi>12)t+=" Part of the frame is blown out white, which editing cannot bring back.";
+  var r=S.photo.crop;
+  if(r&&r.fail)t+=" <b>The car does not fit a "+S.shape+" frame</b>, so this one is left as shot.";
+  else if(r&&r.cropped)t+=" Cropped to the "+S.shape+" shape.";
+  $("lightNote").innerHTML=t;
+}
+function setBusy(t){$("busy").hidden=!t;if(t)$("busyText").textContent=t}
+function showMsg(t){$("coachMsg").hidden=!t;$("coachMsg").textContent=t||""}
+
+/* ---------- Claude check (optional, user's own key) ---------- */
+function headers(key){return {"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"}}
+function modelName(){return store("model")||"claude-sonnet-5-5"}
+function coachPrompt(){
+  var ph=S.photo,sh=ph.shot,n=S.refs.length;
+  return "You are a car-listing photo coach. Image 1 is the photo the seller just took."
+  +(n?" Images 2 to "+(n+1)+" are reference car photos the seller likes: compare image 1 with them for camera height, distance, angle and overall look.":"")
+  +"\nIntended shot: "+sh.label+" ("+(sh.ext?"exterior":"interior or detail")+"). How it should be taken: "+sh.stand+" Camera height: "+sh.height
+  +"\nWanted photo shape: "+(S.shape==="tall"?"tall 3:4":S.shape==="wide"?"wide 4:3":"as shot")+". The photo is "+ph.src.width+"x"+ph.src.height+"."
+  +"\nLens used: "+(ph.lens||"unknown")+". iPhone lenses: 0.5x ultra-wide (stretches a car's exterior, useful inside the cabin), 1x, and telephoto (flattering outside, needs distance)."
+  +"\nMeasured: mean brightness "+ph.m.mean.toFixed(2)+" (0 to 1), "+ph.m.clipLo.toFixed(0)+"% crushed black, "+ph.m.clipHi.toFixed(0)+"% blown white."
+  +"\n\nCompare image 1 with how professional dealer listing photos take this shot. Exterior: whole car in frame with an even margin of roughly 8 to 12 percent each side; camera at headlight-to-mirror height, not looking down on the roof; phone level; no wide-lens stretch; car clearly lit, not a silhouette; few reflections, shadows across the car, or clutter. Interior: the whole subject visible (full dash, both seats, whole bench, whole trunk opening, readable odometer); phone level with the dash line; cabin bright enough to see materials and condition; windows not blown out; no glare on screens or gauges; no clutter, trash or personal items; steering wheel straight; nothing blurred."
+  +"\n\nReply with only JSON in this shape:\n"
+  +'{"found":true,"score":0,"verdict":"8 words max","cut_off":false,"sharp":true,"box":{"x":0,"y":0,"w":1,"h":1},'
+  +'"moves":[{"do":"up|down|left|right|back|closer|tilt|lens|light|other","text":"one concrete instruction, 14 words max"}],'
+  +'"lens":{"use":"0.5x|1x|Tele","switch":false,"why":"12 words max"},"light":{"dark":false,"blown":false,"note":"14 words max"},"ref":"16 words max on how it differs from the references, or empty"}'
+  +"\nRules: score is 0 to 100 for listing quality, 80 or more means listing-ready. box is the main subject's bounding box as fractions of image 1 (x and y are the top-left corner). moves holds at most 3 changes for the retake, most important first: up means raise the phone, down means lower it, left and right mean step sideways from the photographer's point of view, back means step away, closer means step toward, tilt means level or rotate the phone, lens means change lens, light means move relative to the sun, open doors or add light, other covers tidying or straightening the wheel. Give real amounts where you can. If the shot is listing-ready return an empty moves list. If the subject is not in the photo set found to false.";
+}
+function claudeCheck(){
+  var key=store("key");if(!key){openSettings();return}
+  var gen=++S.gen;if(S.ctl)S.ctl.abort();var ctl=new AbortController();S.ctl=ctl;
+  setBusy("Claude is checking the shot");showMsg("");
+  var blobs=[canvasBlob(toCanvas(S.photo.src,1280),.82)].concat(S.refs.map(function(r){return Promise.resolve(r.blob)}));
+  Promise.all(blobs).then(function(bs){return Promise.all(bs.map(b64))}).then(function(datas){
+    var content=datas.map(function(d){return {type:"image",source:{type:"base64",media_type:"image/jpeg",data:d}}});
+    content.push({type:"text",text:coachPrompt()});
+    return fetch(API+"messages",{method:"POST",headers:headers(key),signal:ctl.signal,body:JSON.stringify({model:modelName(),max_tokens:900,messages:[{role:"user",content:content}]})});
+  }).then(function(r){return r.json().catch(function(){return {}}).then(function(j){return {ok:r.ok,status:r.status,j:j}})}).then(function(o){
+    if(gen!==S.gen)return;
+    if(!o.ok)throw {status:o.status,msg:o.j&&o.j.error&&o.j.error.message};
+    var text=(o.j.content||[]).filter(function(c){return c.type==="text"}).map(function(c){return c.text}).join("");
+    var a=text.indexOf("{"),z=text.lastIndexOf("}");if(a<0||z<=a)throw {status:0,msg:"no json"};
+    setBusy(null);showAdvice(JSON.parse(text.slice(a,z+1)));
+  }).catch(function(e){
+    if(gen!==S.gen||(e&&e.name==="AbortError"))return;setBusy(null);
+    var s=e&&e.status;
+    showMsg(s===401||s===403?"That API key was not accepted. Check it in Settings.":s===404?"That model name was not found. Pick another in Settings.":s===429?"Your API account is rate limited or out of credit. Try again shortly.":s===0?"Claude's answer could not be read. Tap the check again.":s?"Claude returned an error ("+s+"). "+(e.msg?String(e.msg).slice(0,120):""):"Could not reach Claude. Check your connection and try again.");
+  });
+}
+function num(v,d){v=+v;return isFinite(v)?v:d}
+function showAdvice(j){
+  if(j.found===false){$("verdict").hidden=true;$("moves").innerHTML="";showMsg("Claude could not find the "+S.photo.shot.label.toLowerCase()+" in this photo. Retake it with the whole subject in frame.");return}
+  if(j.box&&S.photo.shot.ext){
+    var b=j.box,box={x:Math.min(.98,Math.max(0,num(b.x,0))),y:Math.min(.98,Math.max(0,num(b.y,0)))};
+    box.w=Math.min(1-box.x,Math.max(.02,num(b.w,1)));box.h=Math.min(1-box.y,Math.max(.02,num(b.h,1)));
+    if(!S.advice.box)S.advice.box=box;
+  }
+  var Lg=j.light||{},a=autoParams(S.photo.m,S.advice.box||{x:.12,y:.2,w:.76,h:.62},!S.photo.shot.ext);
+  if(Lg.dark&&a.b<25)a.b=25;if(Lg.blown&&a.h<35)a.h=35;
+  var untouched=S.params.b===S.autoP.b&&S.params.s===S.autoP.s&&S.params.h===S.autoP.h;
+  S.autoP=a;if(untouched){S.params={b:a.b,s:a.s,h:a.h,c:.05};setSliders()}
+  var score=Math.round(Math.min(100,Math.max(0,num(j.score,0)))),cls=score>=80?"s-good":score>=55?"s-warn":"s-bad";
+  var moves=(Array.isArray(j.moves)?j.moves:[]).filter(function(m){return m&&m.text}).slice(0,3);
+  if(j.sharp===false)moves.push({"do":"other",text:"The photo is soft. Tap to focus and hold still."});
+  $("verdict").hidden=false;$("ring").setAttribute("class","ring "+cls);$("ring").setAttribute("aria-label","Score "+score+" out of 100");
+  $("ringArc").setAttribute("stroke-dashoffset",String(201-201*score/100));$("ringNum").textContent=score;
+  $("pill").className="pill "+cls;$("pill").textContent=score>=80?"Listing-ready":score>=55?"Close":"Retake";
+  $("headline").textContent=String(j.verdict||"Checked");$("sub").textContent=Lg.note?String(Lg.note):(j.cut_off?"Part of the subject is cut off.":"");
+  var ul=$("moves");ul.innerHTML="";
+  moves.forEach(function(m){var li=document.createElement("li");li.innerHTML='<span class="ico">'+icon(String(m["do"]))+'</span>';var s=document.createElement("span");s.textContent=String(m.text);li.appendChild(s);ul.appendChild(li)});
+  var ln=j.lens||{};
+  if(ln.use){$("lensNote").hidden=false;$("lensNote").innerHTML="";var bb=document.createElement("b");bb.textContent=(ln["switch"]?"Switch to ":"Stay on ")+ln.use+". ";$("lensNote").appendChild(bb);$("lensNote").appendChild(document.createTextNode(String(ln.why||"")))}
+  if(j.ref&&S.refs.length){$("refNote").hidden=false;$("refNote").innerHTML="";var rb=document.createElement("b");rb.textContent="Against your references: ";$("refNote").appendChild(rb);$("refNote").appendChild(document.createTextNode(String(j.ref)))}
+  render();
+}
+
+/* ---------- save ---------- */
+function finalBlob(){
+  var r=S.photo.crop||cropRect(),c=document.createElement("canvas");c.width=r.w;c.height=r.h;
+  var x=c.getContext("2d",{willReadFrequently:true});x.drawImage(S.photo.src,r.x,r.y,r.w,r.h,0,0,r.w,r.h);tone(x,r.w,r.h,S.params);return canvasBlob(c,.92);
+}
+$("saveBtn").onclick=function(){
+  if(!S.photo)return;var btn=this,msg=$("saveMsg");btn.disabled=true;msg.textContent="Preparing the photo";
+  finalBlob().then(function(blob){
+    S.count++;var name="car-"+S.photo.shot.id+"-"+S.count+".jpg",file;
+    try{file=new File([blob],name,{type:"image/jpeg"})}catch(e){file=null}
+    if(file&&navigator.canShare&&navigator.canShare({files:[file]})){
+      return navigator.share({files:[file]}).then(function(){done()},function(e){if(e&&e.name==="AbortError"){msg.textContent="Not saved. Tap Save when you are ready.";return}hold(blob)});
+    }
+    var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},4000);done();
+  }).catch(function(){msg.textContent="The photo could not be saved. Take a screenshot instead."}).then(function(){btn.disabled=false});
+  function hold(blob){var im=$("holdImg");if(im.src)URL.revokeObjectURL(im.src);im.src=URL.createObjectURL(blob);$("holdDlg").showModal();done()}
+  function done(){msg.textContent="Saved. On to the next shot.";S.saved[S.photo.shot.id]=true;drawSetup()}
+};
+
+/* ---------- references ---------- */
+function findRefBox(r){
+  if(!L.model||r.box||!r.canvas)return;
+  L.model.detect(r.canvas,8,.3).then(function(p){r.box=bestCar(p,r.canvas.width,r.canvas.height)}).catch(function(){});
+}
+function drawRefs(){
+  var box=$("refs");[].slice.call(box.querySelectorAll(".ref,.refx")).forEach(function(n){n.remove()});
+  S.refs.forEach(function(r,i){
+    var b=document.createElement("button");b.type="button";b.className="ref";b.setAttribute("aria-pressed",String(i===S.refActive));
+    b.setAttribute("aria-label","Reference photo "+(i+1)+(i===S.refActive?", used as the live target":""));
+    b.innerHTML='<img alt="" src="'+r.url+'">';
+    b.onclick=function(){S.refActive=S.refActive===i?-1:i;drawRefs()};
+    box.insertBefore(b,$("refBtn"));
+  });
+  if(S.refs.length){var x=document.createElement("button");x.type="button";x.className="refx";x.textContent="Remove all";x.onclick=function(){S.refs.forEach(function(r){URL.revokeObjectURL(r.url)});S.refs=[];S.refActive=-1;drawRefs()};box.appendChild(x)}
+  $("refBtn").hidden=S.refs.length>=3;
+}
+$("refInput").addEventListener("change",function(){
+  var files=[].slice.call(this.files||[]).slice(0,3-S.refs.length);this.value="";
+  files.reduce(function(p,f){
+    return p.then(function(){return loadBitmap(f)}).then(function(bm){var c=toCanvas(bm,1024);if(bm.close)bm.close();return canvasBlob(c,.82).then(function(b){var r={blob:b,url:URL.createObjectURL(b),canvas:c,box:null};S.refs.push(r);findRefBox(r)})}).catch(function(){});
+  },Promise.resolve()).then(function(){if(S.refActive<0&&S.refs.length)S.refActive=0;drawRefs()});
+});
+
+/* ---------- settings ---------- */
+function openSettings(){
+  $("keyIn").value=store("key")||"";$("modelIn").value=modelName();$("keyMsg").textContent="";drawRefs();
+  if(!$("settings").open)$("settings").showModal();
+}
+$("keySave").onclick=function(){
+  var key=$("keyIn").value.trim(),model=$("modelIn").value.trim(),msg=$("keyMsg");
+  if(!key){msg.textContent="Paste a key first.";return}
+  store("key",key);if(model)store("model",model);msg.textContent="Testing the key";
+  fetch(API+"models?limit=100",{headers:headers(key)}).then(function(r){return r.json().catch(function(){return {}}).then(function(j){return {ok:r.ok,status:r.status,j:j}})}).then(function(o){
+    if(!o.ok){msg.textContent=o.status===401||o.status===403?"That key was not accepted. Check it and try again.":"The key was saved, but the test returned an error ("+o.status+").";return}
+    var ids=(o.j.data||[]).map(function(m){return m.id}),dl=$("modelList");dl.innerHTML="";
+    ids.forEach(function(id){var op=document.createElement("option");op.value=id;dl.appendChild(op)});
+    if(ids.length&&ids.indexOf(modelName())<0){var pick=ids.filter(function(i){return /sonnet/.test(i)})[0]||ids[0];store("model",pick);$("modelIn").value=pick;msg.textContent="Key works. Model set to "+pick+"."}
+    else msg.textContent="Key works.";
+  }).catch(function(){msg.textContent="The key was saved, but the test could not reach Anthropic."});
+};
+$("keyDel").onclick=function(){store("key",null);$("keyIn").value="";$("keyMsg").textContent="Key removed from this browser."};
+
+/* ---------- buttons ---------- */
+$("startBtn").onclick=startCamera;
+$("exitBtn").onclick=stopCamera;
+$("shutter").onclick=capture;
+$("autoBtn").onclick=function(){S.auto=!S.auto;store("auto",S.auto?"1":"0");this.setAttribute("aria-pressed",String(S.auto))};
+$("autoBtn").setAttribute("aria-pressed",String(S.auto));
+$("setBtn").onclick=openSettings;$("setBtn2").onclick=function(){L.paused=true;openSettings()};
+$("setClose").onclick=function(){$("settings").close()};
+$("settings").addEventListener("close",function(){if(!$("review").open){L.paused=false;L.said=""}$("claudeBtn").textContent=store("key")?"Check with Claude":"Add a Claude key to score this shot"});
+$("refBtn").onclick=function(){$("refInput").click()};
+$("libBtn").onclick=function(){$("libInput").click()};
+$("libInput").addEventListener("change",function(){
+  var f=this.files&&this.files[0];this.value="";if(!f)return;
+  loadBitmap(f).then(function(bm){var src=toCanvas(bm,3000);if(bm.close)bm.close();openReview(src,null,null)}).catch(function(e){var er=$("startErr");er.hidden=false;er.textContent=(e&&e.message)||"That file could not be opened."});
+});
+$("beforeBtn").onclick=function(){S.before=!S.before;this.setAttribute("aria-pressed",String(S.before));this.textContent=S.before?"Show fixed":"Show original";render()};
+$("resetBtn").onclick=function(){S.params={b:S.autoP.b,s:S.autoP.s,h:S.autoP.h,c:.05};setSliders();render()};
+$("claudeBtn").onclick=claudeCheck;
+$("retakeBtn").onclick=closeReview;
+$("legalBtn").onclick=function(){$("legal").showModal()};
+$("legalClose").onclick=function(){$("legal").close()};
+$("holdClose").onclick=function(){$("holdDlg").close()};
+$("wipeBtn").onclick=function(){
+  S.gen++;if(S.ctl)S.ctl.abort();S.refs.forEach(function(r){URL.revokeObjectURL(r.url)});
+  S.refs=[];S.refActive=-1;S.photo=null;S.advice=null;S.saved={};S.count=0;
+  ["key","model","shape","auto"].forEach(function(k){store(k,null)});S.shape="tall";S.auto=true;$("autoBtn").setAttribute("aria-pressed","true");
+  var cv=$("view");cv.width=cv.height=1;drawRefs();drawSetup();$("legal").close();
+};
+window.addEventListener("resize",function(){if(S.photo&&$("review").open)schedule()});
+document.addEventListener("visibilitychange",function(){if(document.hidden&&L.on)stopCamera()});
+drawSetup();drawRefs();
+})();
+</script>
+</body>
+</html>
