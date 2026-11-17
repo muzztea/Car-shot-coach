@@ -169,6 +169,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
   <section class="card">
     <button class="btn primary" type="button" id="startBtn">Start camera</button>
     <button class="btn" type="button" id="saveAllBtn" hidden>Save all photos</button>
+    <button class="btn small" type="button" id="newCarBtn" hidden>Start a new car</button>
     <p class="fine" id="allMsg" role="status" hidden></p>
     <p class="err" id="startErr" role="alert" hidden></p>
     <p class="fine">Safari will ask for the camera, and for motion so it can tell if the phone is level. Everything you see live stays on your phone.</p>
@@ -277,10 +278,10 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
     <h3 id="legalTitle">Privacy &amp; terms</h3>
     <section><h4>Privacy</h4><p>The live camera view, motion readings and photos are processed on your phone and are not uploaded. No accounts, analytics or ads. The exceptions are the optional Claude features, which use your own key: the Claude check sends that photo and your reference photos to Anthropic's API, and the VIN reader sends the VIN photo. A VIN you confirm is also sent to the U.S. NHTSA's free decoder to look up the year, make and model. The VIN is not stored after you close the tab. Saved photos carry no location or other metadata.</p></section>
     <section><h4>Third parties</h4><p>Four, each for one purpose: jsDelivr serves the open-source TensorFlow.js code that finds the car, Google Cloud Storage serves that model's file, Anthropic answers the Claude check and reads the VIN if you add a key, and NHTSA decodes a VIN. No other SDKs or trackers.</p></section>
-    <section><h4>Cookies and storage</h4><p>No cookies. Your auto-shoot choice, and your API key if you add one, are kept in this browser's local storage so the tool works next time. Nothing optional is stored, so there is no consent banner.</p></section>
+    <section><h4>Cookies and storage</h4><p>No cookies. Your kept photos, your auto-shoot choice, and your API key if you add one, are kept in this browser's own storage so the tool works next time. Nothing optional is stored, so there is no consent banner.</p></section>
     <section><h4>Terms of use</h4><p>The coaching is guidance, not a guarantee of a sale or a price. The lighting fix changes exposure only. Do not use edits to hide damage or misdescribe a vehicle; you are responsible for what your listing shows. Watch your surroundings while you move around the car.</p></section>
     <section><h4>Price and refunds</h4><p>This tool is free, with no fees and nothing to refund. The optional Claude check is billed by Anthropic to your own API account.</p></section>
-    <section><h4>Delete your data</h4><p>Photos live in this tab until you close it. The button below wipes them along with your saved settings and API key.</p><p style="margin-top:8px"><button class="btn small" type="button" id="wipeBtn">Delete everything now</button></p></section>
+    <section><h4>Delete your data</h4><p>Photos you keep are stored in this browser on your phone, so a refresh does not lose them. They are never uploaded. Start a new car deletes them, and the button below wipes them along with your saved settings and API key.</p><p style="margin-top:8px"><button class="btn small" type="button" id="wipeBtn">Delete everything now</button></p></section>
     <section><h4>Children</h4><p>Not directed at children under 13 and collects no personal data from anyone.</p></section>
     <section><h4>Email</h4><p>This tool sends no email, so there is nothing to unsubscribe from.</p></section>
     <section><h4>Accessibility</h4><p>Works with a keyboard and screen reader, and each live instruction is announced. Tell the operator if something is hard to use.</p></section>
@@ -384,6 +385,7 @@ function drawSetup(){
   $("briefTips").innerHTML="<li><b>Stand</b><span>"+S.shot.stand+"</span></li><li><b>Height</b><span>"+S.shot.height+"</span></li><li><b>Lens</b><span>"+S.shot.lens+"</span></li>";
   $("savedCount").textContent=Object.keys(S.saved).length+" of "+SHOTS.length+" done";
   var nk=Object.keys(S.kept).length;$("saveAllBtn").hidden=!nk;$("saveAllBtn").textContent="Save all "+nk+" kept shot"+(nk===1?"":"s");
+  $("newCarBtn").hidden=!nk;if(!$("newCarBtn").dataset.arm)$("newCarBtn").textContent="Start a new car";
   drawVin();
   if(!nk)$("allMsg").hidden=true;
   [].forEach.call($("shapeSeg").children,function(x){x.setAttribute("aria-pressed",String(x.dataset.shape===S.shape))});
@@ -955,12 +957,28 @@ $("saveBtn").onclick=function(){
   }).catch(function(e){msg.textContent=e&&e.name==="AbortError"?"Not saved. Tap again when you are ready.":"The photo could not be saved here. Use Keep, then Save all."}).then(function(){btn.disabled=false});
 };
 
+/* kept photos live in this browser's storage so a refresh does not lose them */
+var DB=null;
+function db(){return DB||(DB=new Promise(function(res,rej){try{var r=indexedDB.open("csc",1);r.onupgradeneeded=function(){r.result.createObjectStore("kept")};r.onsuccess=function(){res(r.result)};r.onerror=function(){rej(r.error)}}catch(e){rej(e)}}))}
+function dbPut(id,files){db().then(function(d){d.transaction("kept","readwrite").objectStore("kept").put(files,id)}).catch(function(){})}
+function dbClear(){db().then(function(d){d.transaction("kept","readwrite").objectStore("kept").clear()}).catch(function(){})}
+function dbLoad(){db().then(function(d){
+  var st=d.transaction("kept").objectStore("kept"),k=st.getAllKeys(),v=st.getAll();
+  v.onsuccess=function(){(k.result||[]).forEach(function(id,i){if(SHOTS.some(function(q){return q.id===id})&&v.result[i]&&v.result[i].length){S.kept[id]=v.result[i];S.saved[id]=true}});
+    var first=SHOTS.filter(function(q){return !S.kept[q.id]})[0];if(first&&Object.keys(S.kept).length)S.shot=first;drawSetup()};
+}).catch(function(){})}
+function newCar(){S.kept={};S.saved={};S.vin=null;S.vinOk=false;S.vinInfo="";S.shot=SHOTS[0];dbClear();$("allMsg").hidden=true;drawSetup()}
+$("newCarBtn").onclick=function(){
+  var b=this;if(b.dataset.arm){delete b.dataset.arm;newCar();return}
+  b.dataset.arm="1";b.textContent="Tap again to delete these photos";setTimeout(function(){if(b.dataset.arm){delete b.dataset.arm;drawSetup()}},4000);
+};
+
 /* keep the shot and move to the next one that is not done */
 function nextShot(cur){var i=SHOTS.indexOf(cur);for(var k=1;k<=SHOTS.length;k++){var s=SHOTS[(i+k)%SHOTS.length];if(!S.kept[s.id])return s}return null}
 $("keepBtn").onclick=function(){
   if(!S.photo)return;var btn=this,sh=S.photo.shot;btn.disabled=true;
   finalFiles().then(function(files){
-    S.kept[sh.id]=files;S.saved[sh.id]=true;
+    S.kept[sh.id]=files;S.saved[sh.id]=true;dbPut(sh.id,files);
     var next=nextShot(sh);closeReview();
     if(next){setShot(next);L.note={text:"Kept. Next: "+next.label,until:performance.now()+2400};L.said=""}
     else{if(L.on)stopCamera();else drawSetup();$("allMsg").hidden=false;$("allMsg").textContent="Every shot is done. Tap Save all to put them in your Photos."}
@@ -1042,13 +1060,13 @@ $("legalClose").onclick=function(){$("legal").close()};
 $("holdClose").onclick=function(){$("holdDlg").close()};
 $("wipeBtn").onclick=function(){
   S.gen++;if(S.ctl)S.ctl.abort();S.refs.forEach(function(r){URL.revokeObjectURL(r.url)});
-  S.refs=[];S.refActive=-1;S.photo=null;S.advice=null;S.saved={};S.kept={};S.count=0;
+  S.refs=[];S.refActive=-1;S.photo=null;S.advice=null;S.saved={};S.kept={};S.count=0;dbClear();
   ["key","model","shape","auto"].forEach(function(k){store(k,null)});S.shape="square";S.vin=null;S.vinOk=false;S.vinInfo="";S.auto=true;$("autoBtn").setAttribute("aria-pressed","true");
   var cv=$("view");cv.width=cv.height=1;drawRefs();drawSetup();$("legal").close();
 };
 window.addEventListener("resize",function(){if(S.photo&&$("review").open)schedule()});
 document.addEventListener("visibilitychange",function(){if(document.hidden&&L.on)stopCamera()});
-drawSetup();drawRefs();
+drawSetup();drawRefs();dbLoad();
 })();
 </script>
 </body>
