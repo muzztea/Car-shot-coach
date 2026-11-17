@@ -701,20 +701,17 @@ $("viewSeg").addEventListener("click",function(e){var b=e.target.closest("button
 function closeReview(){if($("review").open)$("review").close()}
 $("review").addEventListener("close",function(){S.gen++;if(S.ctl)S.ctl.abort();L.paused=false;L.lastShot=performance.now();L.said=""});
 function clamp(v,a,b){return Math.min(Math.max(v,a),Math.max(a,b))}
-/* where to cut the photo for one output shape; fit means the subject cannot be cropped whole */
+/* where to cut the photo for one output shape; cut means the car does not fit that crop and the shot needs retaking */
 function layout(shape){
   var W=S.photo.src.width,H=S.photo.src.height,a=ASPECT[shape],box=S.advice&&S.advice.box;
   var cw=Math.min(W,H*a),ch=cw/a,cx=W/2,cy=H/2;
   if(box){
     var bw=box.w*W,bh=box.h*H;cx=(box.x+box.w/2)*W;cy=(box.y+box.h/2)*H;
-    if(bw>cw*.985||bh>ch*.985){
-      var sw=Math.min(W,bw*1.1),shh=Math.min(H,Math.max(bh*1.1,sw/a));if(sw/shh<a)sw=Math.min(W,shh*a);
-      return {sx:clamp(cx-sw/2,0,W-sw),sy:clamp(cy-shh/2,0,H-shh),sw:sw,sh:shh,fit:true};
-    }
+    if(bw>cw*.985||bh>ch*.985)return {sx:clamp(cx-cw/2,0,W-cw),sy:clamp(cy-ch/2,0,H-ch),sw:cw,sh:ch,fit:false,cut:true};
     /* same car size in every photo: tighten the crop when the car is small in it, but never below half */
     var want=Math.max(bw/(S.photo.shot.fill||.86),bh/.78*a);
     if(want<cw){cw=Math.max(want,cw*.5);ch=cw/a}
-  }else if(cw*ch<W*H*.5)return {sx:0,sy:0,sw:W,sh:H,fit:true};
+  }
   return {sx:clamp(cx-cw/2,0,W-cw),sy:clamp(cy-ch/2,0,H-ch),sw:cw,sh:ch,fit:false};
 }
 function compose(shape,maxSide,toned){
@@ -762,8 +759,10 @@ function drawLightNote(){
   var t=parts.length?"<b>Light fix:</b> "+parts.join(", ")+".":"<b>Exposure looks right.</b> No fix was needed.";
   if(m.clipHi>12)t+=" Part of the frame is blown out white, which editing cannot bring back.";
   var l=S.photo.lay,nm=S.view==="square"?"square":"9:16";
-  if(l&&l.fit)t+=" The subject is too wide for a "+nm+" crop, so the whole shot sits on a blurred fill.";
+  var bad=wanted().filter(function(k){return layout(k).cut}).map(function(k){return k==="square"?"square":"9:16"});
+  if(bad.length)t="<b class=\"s-bad\">The car is cut off in the "+bad.join(" and ")+" crop.</b> Retake it: step back, or switch to a wider lens, until the whole car sits inside the bright area. This shot cannot be kept.";
   else t+=" Cropped to "+nm+".";
+  $("keepBtn").disabled=$("saveBtn").disabled=!!bad.length;
   $("lightNote").innerHTML=t;
 }
 function setBusy(t){$("busy").hidden=!t;if(t)$("busyText").textContent=t}
