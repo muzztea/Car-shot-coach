@@ -144,7 +144,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
     <h2 id="h-shot">Which shot <span id="savedCount" style="float:right;letter-spacing:0;text-transform:none;font-weight:500"></span></h2>
     <div class="inner">
       <div class="grp">Exterior</div><div class="chips" id="chipsExt"></div>
-      <div class="grp">Interior</div><div class="chips" id="chipsInt"></div>
+      <div class="grp">Interior and details</div><div class="chips" id="chipsInt"></div>
     </div>
     <div class="brief">
       <div id="plan" role="img" aria-label="Where to stand"></div>
@@ -162,6 +162,8 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
 
   <section class="card">
     <button class="btn primary" type="button" id="startBtn">Start camera</button>
+    <button class="btn" type="button" id="saveAllBtn" hidden>Save all photos</button>
+    <p class="fine" id="allMsg" role="status" hidden></p>
     <p class="err" id="startErr" role="alert" hidden></p>
     <p class="fine">Safari will ask for the camera, and for motion so it can tell if the phone is level. Everything you see live stays on your phone.</p>
     <div class="actions">
@@ -225,7 +227,8 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
       <button class="btn small" type="button" id="resetBtn">Reset to auto</button>
       <button class="btn small full" type="button" id="claudeBtn">Check with Claude</button>
       <button class="btn" type="button" id="retakeBtn">Retake</button>
-      <button class="btn primary" type="button" id="saveBtn" style="grid-column:auto">Save</button>
+      <button class="btn primary" type="button" id="keepBtn" style="grid-column:auto">Keep, next shot</button>
+      <button class="btn small full" type="button" id="saveBtn">Save only this one now</button>
     </div>
     <p class="fine" id="saveMsg" role="status"></p>
   </div>
@@ -285,12 +288,15 @@ var COCO="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/co
 var API="https://api.anthropic.com/v1/";
 
 var SHOTS=[
- {id:"front-corner",label:"Front corner",ext:true,ang:-38,dist:1,tp:.86,tl:.66,asp:1.9,stand:"Off the headlight, so the grille and one full side both show.",height:"Headlight to mirror height, about your waist to chest.",lens:"1x. Use the longer lens if you can back up."},
- {id:"side",label:"Side",ext:true,ang:-90,dist:1.1,tp:.9,tl:.84,asp:3.1,stand:"Square to the middle of the car, lined up with the gap between the doors.",height:"Door-handle height, phone level.",lens:"1x from 20 feet or more. Not 0.5x."},
- {id:"rear-corner",label:"Rear corner",ext:true,ang:-142,dist:1,tp:.86,tl:.66,asp:1.9,stand:"Off the taillight, so the trunk and one full side both show.",height:"Taillight height, about your waist.",lens:"1x. Use the longer lens if you can back up."},
- {id:"front",label:"Front",ext:true,ang:0,dist:1,tp:.72,tl:.46,asp:1.3,stand:"Dead center on the badge.",height:"Headlight height. Crouch a little.",lens:"1x or the longer lens."},
- {id:"rear",label:"Rear",ext:true,ang:180,dist:1,tp:.72,tl:.46,asp:1.3,stand:"Dead center on the trunk badge.",height:"Taillight height.",lens:"1x or the longer lens."},
- {id:"wheel",label:"Wheel",ext:false,ang:-62,dist:.5,stand:"Crouch square to the wheel so it fills most of the frame.",height:"Hub height.",lens:"1x."},
+ {id:"front-center",label:"Front center",ext:true,ang:0,dist:1,tp:.72,tl:.46,asp:1.3,stand:"Dead center on the front badge.",height:"Headlight height. Crouch a little.",lens:"1x or the longer lens."},
+ {id:"front-left",label:"Front left",ext:true,ang:-38,dist:1,tp:.86,tl:.66,asp:1.9,stand:"Off the driver-side headlight, so the grille and the whole driver side both show.",height:"Headlight to mirror height, about your waist to chest.",lens:"1x. Use the longer lens if you can back up."},
+ {id:"left-side",label:"Left side",ext:true,ang:-90,dist:1.1,tp:.9,tl:.84,asp:3.1,stand:"Square to the middle of the driver side, lined up with the gap between the doors.",height:"Door-handle height, phone level.",lens:"1x from 20 feet or more. Not 0.5x."},
+ {id:"rear-left",label:"Rear left",ext:true,ang:-142,dist:1,tp:.86,tl:.66,asp:1.9,stand:"Off the driver-side taillight, so the trunk and the whole driver side both show.",height:"Taillight height, about your waist.",lens:"1x. Use the longer lens if you can back up."},
+ {id:"rear-center",label:"Rear center",ext:true,ang:180,dist:1,tp:.72,tl:.46,asp:1.3,stand:"Dead center on the trunk badge.",height:"Taillight height.",lens:"1x or the longer lens."},
+ {id:"rear-right",label:"Rear right",ext:true,ang:142,dist:1,tp:.86,tl:.66,asp:1.9,stand:"Off the passenger-side taillight, so the trunk and the whole passenger side both show.",height:"Taillight height, about your waist.",lens:"1x. Use the longer lens if you can back up."},
+ {id:"right-side",label:"Right side",ext:true,ang:90,dist:1.1,tp:.9,tl:.84,asp:3.1,stand:"Square to the middle of the passenger side, lined up with the gap between the doors.",height:"Door-handle height, phone level.",lens:"1x from 20 feet or more. Not 0.5x."},
+ {id:"front-right",label:"Front right",ext:true,ang:38,dist:1,tp:.86,tl:.66,asp:1.9,stand:"Off the passenger-side headlight, so the grille and the whole passenger side both show.",height:"Headlight to mirror height, about your waist to chest.",lens:"1x. Use the longer lens if you can back up."},
+ {id:"wheel",label:"Wheel",ext:false,outdoor:true,ang:-62,dist:.5,stand:"Crouch square to the best wheel so it fills most of the frame. Show the tire tread too.",height:"Hub height.",lens:"1x."},
  {id:"dash",label:"Dash",ext:false,wide:true,ang:-90,dist:.36,stand:"At the open driver door, or centered in the back seat, aimed across the whole dash.",height:"Seat-shoulder height.",lens:"0.5x. It fits the full dash."},
  {id:"front-seats",label:"Front seats",ext:false,wide:true,ang:90,dist:.4,stand:"At the open passenger door, aimed across both seats.",height:"Seat-cushion to shoulder height.",lens:"0.5x."},
  {id:"rear-seats",label:"Rear seats",ext:false,wide:true,ang:-112,dist:.42,stand:"At the open rear door, aimed across the bench.",height:"Seat-shoulder height.",lens:"0.5x."},
@@ -315,8 +321,8 @@ function icon(kind){
 }
 function store(k,v){try{if(v===undefined)return localStorage.getItem("csc_"+k);if(v===null)localStorage.removeItem("csc_"+k);else localStorage.setItem("csc_"+k,v)}catch(e){}return null}
 
-var S={shot:SHOTS[0],shape:store("shape")||"tall",auto:store("auto")!=="0",refs:[],refActive:-1,saved:{},photo:null,params:{b:0,s:0,h:0,c:.05},autoP:null,before:false,advice:null,gen:0,ctl:null,raf:0,count:0};
-var L={on:false,stream:null,model:null,modelState:"idle",box:null,boxAt:0,G:null,roll:0,pitch:0,rot:0,light:null,lenses:[],lens:null,readySince:0,lastShot:0,paused:false,said:"",saidAt:0};
+var S={shot:SHOTS[0],shape:store("shape")||"tall",auto:store("auto")!=="0",refs:[],refActive:-1,saved:{},kept:{},photo:null,params:{b:0,s:0,h:0,c:.05},autoP:null,before:false,advice:null,gen:0,ctl:null,raf:0,count:0};
+var L={on:false,stream:null,model:null,modelState:"idle",box:null,boxAt:0,G:null,roll:0,pitch:0,rot:0,light:null,lenses:[],lens:null,readySince:0,lastShot:0,paused:false,said:"",saidAt:0,note:null};
 var video=$("video"),isIOS=typeof DeviceMotionEvent!=="undefined"&&typeof DeviceMotionEvent.requestPermission==="function";
 
 /* ---------- setup screen ---------- */
@@ -349,10 +355,12 @@ function drawSetup(){
   $("plan").setAttribute("aria-label","Top-down diagram: where to stand for the "+S.shot.label.toLowerCase()+" shot");
   $("briefTitle").textContent=S.shot.label;
   $("briefTips").innerHTML="<li><b>Stand</b><span>"+S.shot.stand+"</span></li><li><b>Height</b><span>"+S.shot.height+"</span></li><li><b>Lens</b><span>"+S.shot.lens+"</span></li>";
-  $("savedCount").textContent=Object.keys(S.saved).length+" of "+SHOTS.length+" saved";
+  $("savedCount").textContent=Object.keys(S.saved).length+" of "+SHOTS.length+" done";
+  var nk=Object.keys(S.kept).length;$("saveAllBtn").hidden=!nk;$("saveAllBtn").textContent="Save all "+nk+" photo"+(nk===1?"":"s");
+  if(!nk)$("allMsg").hidden=true;
   [].forEach.call($("shapeSeg").children,function(x){x.setAttribute("aria-pressed",String(x.dataset.shape===S.shape))});
   var sel=$("shotSel");sel.innerHTML="";
-  [["Exterior",EXT],["Interior",INT]].forEach(function(g){
+  [["Exterior",EXT],["Interior and details",INT]].forEach(function(g){
     var og=document.createElement("optgroup");og.label=g[0];
     g[1].forEach(function(sh){var o=document.createElement("option");o.value=sh.id;o.textContent=(S.saved[sh.id]?"✓ ":"")+sh.label;if(sh===S.shot)o.selected=true;og.appendChild(o)});
     sel.appendChild(og);
@@ -582,8 +590,8 @@ function guide(){
       if(li.car&&li.car.med<.13&&li.m.p95>.9&&li.m.mean-li.car.med>.28){okL=false;say("light","The car is a silhouette. Put the sun behind you")}
       else if(li.m.clipHi>30){okL=false;say("light","Too much glare. Change your angle to the sun")}
     }else{
-      if(li.m.mean<.12){okL=false;say("light","Too dark. Open the doors or turn on the dome light")}
-      else if(li.m.clipHi>24){okL=false;say("light","The windows are blowing out. Aim lower or find shade")}
+      if(li.m.mean<.12){okL=false;say("light",sh.outdoor?"Too dark. Move so light falls on it":"Too dark. Open the doors or turn on the dome light")}
+      else if(li.m.clipHi>24){okL=false;say("light",sh.outdoor?"Too much glare. Change your angle to the sun":"The windows are blowing out. Aim lower or find shade")}
     }
     chips.Light=okL?"ok":"bad";
   }
@@ -596,7 +604,9 @@ function frame(){
   if(!L.on)return;
   requestAnimationFrame(frame);
   if(L.paused)return;
-  var g=guide(),now=performance.now(),cam=$("cam"),ov=$("ov"),vw=video.videoWidth,vh=video.videoHeight;
+  var g=guide(),now=performance.now();
+  if(L.note){if(now<L.note.until)g={kind:"ok",text:L.note.text,chips:g.chips,ready:false,tgt:g.tgt};else L.note=null}
+  var cam=$("cam"),ov=$("ov"),vw=video.videoWidth,vh=video.videoHeight;
   if(g.text!==L.said&&(now-L.saidAt>350||g.kind==="ok")){
     L.said=g.text;L.saidAt=now;
     $("liveText").textContent=g.text;$("liveIco").innerHTML=icon(g.kind);$("liveBanner").className="banner"+(g.kind==="ok"?" ok":"");
@@ -688,9 +698,9 @@ function setSliders(){
 }
 ["sB","sS","sH"].forEach(function(id){$(id).addEventListener("input",function(){S.params.b=+$("sB").value;S.params.s=+$("sS").value;S.params.h=+$("sH").value;setSliders();schedule()})});
 function drawLightNote(){
-  var a=S.autoP,m=S.photo.m,parts=[],what=S.photo.shot.ext?"the car":"the cabin";
+  var a=S.autoP,m=S.photo.m,parts=[],what=S.photo.shot.ext?"the car":S.photo.shot.outdoor?"the wheel":"the cabin";
   if(a.b>0)parts.push("brightened "+what+" about "+(a.b/100).toFixed(1)+" stops");else if(a.b<0)parts.push("pulled "+what+" down about "+(-a.b/100).toFixed(1)+" stops");
-  if(a.s>12)parts.push("opened the shadows");if(a.h>12)parts.push(S.photo.shot.ext?"held back the bright sky":"held back the windows");
+  if(a.s>12)parts.push("opened the shadows");if(a.h>12)parts.push(S.photo.shot.ext?"held back the bright sky":S.photo.shot.outdoor?"held back the bright areas":"held back the windows");
   var t=parts.length?"<b>Light fix:</b> "+parts.join(", ")+".":"<b>Exposure looks right.</b> No fix was needed.";
   if(m.clipHi>12)t+=" Part of the frame is blown out white, which editing cannot bring back.";
   var r=S.photo.crop;
@@ -783,7 +793,29 @@ $("saveBtn").onclick=function(){
     var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},4000);done();
   }).catch(function(){msg.textContent="The photo could not be saved. Take a screenshot instead."}).then(function(){btn.disabled=false});
   function hold(blob){var im=$("holdImg");if(im.src)URL.revokeObjectURL(im.src);im.src=URL.createObjectURL(blob);$("holdDlg").showModal();done()}
-  function done(){msg.textContent="Saved. On to the next shot.";S.saved[S.photo.shot.id]=true;drawSetup()}
+  function done(){msg.textContent="Saved.";S.saved[S.photo.shot.id]=true;drawSetup()}
+};
+
+/* keep the shot and move to the next one that is not done */
+function nextShot(cur){var i=SHOTS.indexOf(cur);for(var k=1;k<=SHOTS.length;k++){var s=SHOTS[(i+k)%SHOTS.length];if(!S.kept[s.id])return s}return null}
+$("keepBtn").onclick=function(){
+  if(!S.photo)return;var btn=this,sh=S.photo.shot;btn.disabled=true;
+  finalBlob().then(function(blob){
+    S.kept[sh.id]={blob:blob,name:"car-"+sh.id+".jpg"};S.saved[sh.id]=true;
+    var next=nextShot(sh);closeReview();
+    if(next){setShot(next);L.note={text:"Kept. Next: "+next.label,until:performance.now()+2400};L.said=""}
+    else{if(L.on)stopCamera();else drawSetup();$("allMsg").hidden=false;$("allMsg").textContent="Every shot is done. Tap Save all to put them in your Photos."}
+  }).catch(function(){$("saveMsg").textContent="The photo could not be kept. Try again."}).then(function(){btn.disabled=false});
+};
+$("saveAllBtn").onclick=function(){
+  var list=SHOTS.filter(function(s){return S.kept[s.id]}).map(function(s){return S.kept[s.id]}),files=[],msg=$("allMsg");msg.hidden=false;
+  try{files=list.map(function(k){return new File([k.blob],k.name,{type:"image/jpeg"})})}catch(e){files=[]}
+  if(files.length&&navigator.canShare&&navigator.canShare({files:files})){
+    navigator.share({files:files}).then(function(){msg.textContent="Sent to the share sheet. Choose Save "+files.length+" Images to put them in Photos."},function(e){msg.textContent=e&&e.name==="AbortError"?"Not saved yet. Tap Save all when you are ready.":"Sharing did not work here. Open each shot and use Save only this one."});
+    return;
+  }
+  list.forEach(function(k,i){setTimeout(function(){var a=document.createElement("a");a.href=URL.createObjectURL(k.blob);a.download=k.name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},4000)},i*350)});
+  msg.textContent="Downloading "+list.length+" photos.";
 };
 
 /* ---------- references ---------- */
@@ -853,7 +885,7 @@ $("legalClose").onclick=function(){$("legal").close()};
 $("holdClose").onclick=function(){$("holdDlg").close()};
 $("wipeBtn").onclick=function(){
   S.gen++;if(S.ctl)S.ctl.abort();S.refs.forEach(function(r){URL.revokeObjectURL(r.url)});
-  S.refs=[];S.refActive=-1;S.photo=null;S.advice=null;S.saved={};S.count=0;
+  S.refs=[];S.refActive=-1;S.photo=null;S.advice=null;S.saved={};S.kept={};S.count=0;
   ["key","model","shape","auto"].forEach(function(k){store(k,null)});S.shape="tall";S.auto=true;$("autoBtn").setAttribute("aria-pressed","true");
   var cv=$("view");cv.width=cv.height=1;drawRefs();drawSetup();$("legal").close();
 };
