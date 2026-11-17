@@ -600,9 +600,8 @@ function guide(){
   function say(kind,text){if(!out)out={kind:kind,text:text}}
   if(!vw)return {kind:"dot",text:"Starting the camera",chips:chips,ready:false,tgt:null,zone:null};
   var z=zone(vw,vh),tgt=null;
-  if(sh.manual){var mw=Math.min(.86,z.w*.94);tgt={w:mw,h:mw*vw/6/vh,cx:.5,cy:.5}}
   var crop=null,mq=Math.min(vw,vh);
-  if(!sh.ext&&!sh.manual)crop={x:(vw-mq)/2,y:(vh-mq)/2,size:mq};
+  if(!sh.ext)crop={x:(vw-mq)/2,y:(vh-mq)/2,size:mq};
   if(sh.ext){
     if(L.modelState==="ready"){
       var b=freshBox();
@@ -644,7 +643,7 @@ function guide(){
   }
   if(L.G){chips.Steady=L.rot<(sh.ext?12:7)?"ok":"bad";if(chips.Steady==="bad")say("dot","Hold still")}
   if(out){out.chips=chips;out.ready=false;out.tgt=tgt;out.zone=z;out.crop=crop;return out}
-  if(sh.manual)return {kind:"dot",text:"Fill the box with the VIN, then tap the shutter",chips:chips,ready:false,tgt:tgt,zone:z};
+  if(sh.manual)return {kind:"dot",text:"Fit the VIN inside the box, then tap the shutter",chips:chips,ready:false,tgt:tgt,zone:z};
   var txt=sh.ext&&L.modelState==="loading"?"Loading the car finder. Frame it by eye for now":sh.ext&&L.modelState==="failed"?"Car finder did not load. Frame it by eye":"Lined up. Hold still";
   return {kind:"ok",text:txt,chips:chips,ready:!(sh.ext&&L.modelState!=="ready"),tgt:tgt,zone:z,crop:crop};
 }
