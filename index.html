@@ -314,7 +314,7 @@ var SHOTS=[
  {id:"rear-right",label:"Rear right",ext:true,ang:142,dist:1,fill:.86,asp:1.9,stand:"Off the passenger-side taillight, so the trunk and the whole passenger side both show.",height:"Taillight height, about your waist.",lens:"1x. Use the longer lens if you can back up."},
  {id:"right-side",label:"Right side",ext:true,ang:90,dist:1.1,fill:.92,asp:3.1,stand:"Square to the middle of the passenger side, lined up with the gap between the doors.",height:"Door-handle height, phone level.",lens:"1x from 20 feet or more. Not 0.5x."},
  {id:"front-right",label:"Front right",ext:true,ang:38,dist:1,fill:.86,asp:1.9,stand:"Off the passenger-side headlight, so the grille and the whole passenger side both show.",height:"Headlight to mirror height, about your waist to chest.",lens:"1x. Use the longer lens if you can back up."},
- {id:"wheel",label:"Wheel",ext:false,outdoor:true,ang:-62,dist:.5,stand:"Crouch square to the best wheel so it fills most of the frame. Show the tire tread too.",height:"Hub height.",lens:"1x."},
+ {id:"rims",label:"Rims",ext:false,outdoor:true,ang:-62,dist:.5,stand:"Crouch square to the best rim so the whole wheel fills most of the frame. Show the tire tread too.",height:"Hub height.",lens:"1x."},
  {id:"vin",label:"VIN",ext:false,outdoor:true,manual:true,ang:-52,dist:.44,stand:"From outside, shoot the VIN plate at the bottom corner of the windshield on the driver side. No plate? Use the sticker in the driver door jamb.",height:"Close and square to the plate. Tilt slightly to kill glare.",lens:"1x, about a foot away. Tap the plate to focus."},
  {id:"dash",label:"Dash",ext:false,wide:true,ang:-90,dist:.36,stand:"At the open driver door, or centered in the back seat, aimed across the whole dash.",height:"Seat-shoulder height.",lens:"0.5x. It fits the full dash."},
  {id:"front-seats",label:"Front seats",ext:false,wide:true,ang:90,dist:.4,stand:"At the open passenger door, aimed across both seats.",height:"Seat-cushion to shoulder height.",lens:"0.5x."},
@@ -323,7 +323,7 @@ var SHOTS=[
  {id:"screen",label:"Center screen",ext:false,ang:-90,dist:.12,stand:"From the driver seat, square to the screen and center stack.",height:"Level with the screen.",lens:"1x."},
  {id:"trunk",label:"Trunk",ext:false,ang:180,dist:.8,stand:"Trunk open. Stand back so the whole opening shows.",height:"Chest height, aimed slightly down.",lens:"1x."}
 ];
-var EXT=SHOTS.filter(function(s){return s.ext}),INT=SHOTS.filter(function(s){return !s.ext});
+var EXT=SHOTS.filter(function(s){return s.ext||s.id==="rims"}),INT=SHOTS.filter(function(s){return !s.ext&&s.id!=="rims"});
 var ICON={
  up:'<path d="M12 19V5M5 12l7-7 7 7"/>',
  dist:'<path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"/>',
@@ -606,7 +606,7 @@ function guide(){
       else if(L.pitch<-8){chips.Height="bad";say("up","Raise the phone, then aim level")}
       else chips.Height="ok";
     }
-    if(sh.id!=="trunk"&&sh.id!=="wheel"&&sh.id!=="odometer"&&!sh.manual){
+    if(sh.id!=="trunk"&&sh.id!=="rims"&&sh.id!=="odometer"&&!sh.manual){
       chips.Level=Math.abs(L.roll)<=2?"ok":"bad";if(chips.Level==="bad")say("tilt","Level the phone");
     }
   }
