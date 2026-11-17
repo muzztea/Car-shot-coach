@@ -131,6 +131,9 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
 .ref img{width:100%;height:100%;object-fit:cover;display:block}
 .refx{border:0;background:none;color:var(--muted);font:500 12px var(--body);text-decoration:underline;cursor:pointer;padding:4px}
 .holdimg{max-width:100%;border-radius:var(--r-in2)}
+.field input.vin,.vintext{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;letter-spacing:.06em;font-variant-numeric:tabular-nums}
+.field input.vin{font-size:17px;text-transform:uppercase}
+.vintext{font-weight:600;font-size:14px;margin-left:6px}
 </style>
 </head>
 <body>
@@ -151,13 +154,16 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
       <div><h3 id="briefTitle"></h3><ul id="briefTips"></ul></div>
     </div>
     <div class="row">
-      <span id="l-shape">Photo shape</span>
+      <span id="l-shape">Save photos as</span>
       <div class="seg" role="group" aria-labelledby="l-shape" id="shapeSeg">
-        <button type="button" data-shape="tall">Tall</button>
-        <button type="button" data-shape="wide">Wide</button>
-        <button type="button" data-shape="asis">As shot</button>
+        <button type="button" data-shape="square">Square</button>
+        <button type="button" data-shape="reel">Reels 9:16</button>
+        <button type="button" data-shape="both">Both</button>
       </div>
     </div>
+    <p class="fine">Square suits Facebook Marketplace and 9:16 suits Instagram Reels. Hold the phone either way and use any lens: every photo is cropped to the same shape.</p>
+    <div class="row" id="vinRow" hidden><span>VIN <b class="vintext" id="vinShow"></b></span><button class="btn small" type="button" id="vinCopy2">Copy</button></div>
+    <p class="fine" id="vinInfo" hidden></p>
   </section>
 
   <section class="card">
@@ -199,10 +205,22 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
 <dialog id="review" aria-labelledby="h-res">
   <div class="dlg">
     <h3 id="h-res">Your shot</h3>
+    <div class="seg" role="group" aria-label="Preview shape" id="viewSeg" hidden style="align-self:center">
+      <button type="button" data-view="square">Square</button>
+      <button type="button" data-view="reel">Reels 9:16</button>
+    </div>
     <div class="stagewrap" id="stagewrap"><div class="stage">
       <canvas id="view" role="img" aria-label="Your photo with the lighting fix applied"></canvas>
       <svg id="overlay" aria-hidden="true"></svg>
     </div></div>
+    <div id="vinPanel" hidden style="display:flex;flex-direction:column;gap:10px">
+      <label class="field" for="vinIn">VIN<input class="vin" id="vinIn" type="text" maxlength="20" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="17 characters"></label>
+      <p class="note" id="vinStatus" role="status"></p>
+      <div class="actions">
+        <button class="btn small" type="button" id="vinRead">Read VIN from photo</button>
+        <button class="btn small" type="button" id="vinCopy">Copy VIN</button>
+      </div>
+    </div>
     <div class="busy" id="busy" hidden><span class="spin"></span><span id="busyText">Claude is checking the shot</span></div>
     <div class="verdict" id="verdict" hidden>
       <svg class="ring" viewBox="0 0 76 76" role="img" id="ring" aria-label="Score">
@@ -227,7 +245,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
       <button class="btn small" type="button" id="resetBtn">Reset to auto</button>
       <button class="btn small full" type="button" id="claudeBtn">Check with Claude</button>
       <button class="btn" type="button" id="retakeBtn">Retake</button>
-      <button class="btn primary" type="button" id="keepBtn" style="grid-column:auto">Keep, next shot</button>
+      <button class="btn primary" type="button" id="keepBtn" style="grid-column:auto;font-size:17px">Keep, next</button>
       <button class="btn small full" type="button" id="saveBtn">Save only this one now</button>
     </div>
     <p class="fine" id="saveMsg" role="status"></p>
@@ -256,8 +274,8 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
 <dialog id="legal" aria-labelledby="legalTitle">
   <div class="dlg">
     <h3 id="legalTitle">Privacy &amp; terms</h3>
-    <section><h4>Privacy</h4><p>The live camera view, motion readings and photos are processed on your phone and are not uploaded. No accounts, analytics or ads. The one exception is the optional Claude check: when you tap it, that photo and your reference photos go straight from your phone to Anthropic's API using your own key. Saved photos carry no location or other metadata.</p></section>
-    <section><h4>Third parties</h4><p>Three, each for one purpose: jsDelivr serves the open-source TensorFlow.js code that finds the car, Google Cloud Storage serves that model's file, and Anthropic answers the Claude check if you turn it on. No other SDKs or trackers.</p></section>
+    <section><h4>Privacy</h4><p>The live camera view, motion readings and photos are processed on your phone and are not uploaded. No accounts, analytics or ads. The exceptions are the optional Claude features, which use your own key: the Claude check sends that photo and your reference photos to Anthropic's API, and the VIN reader sends the VIN photo. A VIN you confirm is also sent to the U.S. NHTSA's free decoder to look up the year, make and model. The VIN is not stored after you close the tab. Saved photos carry no location or other metadata.</p></section>
+    <section><h4>Third parties</h4><p>Four, each for one purpose: jsDelivr serves the open-source TensorFlow.js code that finds the car, Google Cloud Storage serves that model's file, Anthropic answers the Claude check and reads the VIN if you add a key, and NHTSA decodes a VIN. No other SDKs or trackers.</p></section>
     <section><h4>Cookies and storage</h4><p>No cookies. Your shape and auto-shoot choices, and your API key if you add one, are kept in this browser's local storage so the tool works next time. Nothing optional is stored, so there is no consent banner.</p></section>
     <section><h4>Terms of use</h4><p>The coaching is guidance, not a guarantee of a sale or a price. The lighting fix changes exposure only. Do not use edits to hide damage or misdescribe a vehicle; you are responsible for what your listing shows. Watch your surroundings while you move around the car.</p></section>
     <section><h4>Price and refunds</h4><p>This tool is free, with no fees and nothing to refund. The optional Claude check is billed by Anthropic to your own API account.</p></section>
@@ -288,15 +306,16 @@ var COCO="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/co
 var API="https://api.anthropic.com/v1/";
 
 var SHOTS=[
- {id:"front-center",label:"Front center",ext:true,ang:0,dist:1,tp:.72,tl:.46,asp:1.3,stand:"Dead center on the front badge.",height:"Headlight height. Crouch a little.",lens:"1x or the longer lens."},
- {id:"front-left",label:"Front left",ext:true,ang:-38,dist:1,tp:.86,tl:.66,asp:1.9,stand:"Off the driver-side headlight, so the grille and the whole driver side both show.",height:"Headlight to mirror height, about your waist to chest.",lens:"1x. Use the longer lens if you can back up."},
- {id:"left-side",label:"Left side",ext:true,ang:-90,dist:1.1,tp:.9,tl:.84,asp:3.1,stand:"Square to the middle of the driver side, lined up with the gap between the doors.",height:"Door-handle height, phone level.",lens:"1x from 20 feet or more. Not 0.5x."},
- {id:"rear-left",label:"Rear left",ext:true,ang:-142,dist:1,tp:.86,tl:.66,asp:1.9,stand:"Off the driver-side taillight, so the trunk and the whole driver side both show.",height:"Taillight height, about your waist.",lens:"1x. Use the longer lens if you can back up."},
- {id:"rear-center",label:"Rear center",ext:true,ang:180,dist:1,tp:.72,tl:.46,asp:1.3,stand:"Dead center on the trunk badge.",height:"Taillight height.",lens:"1x or the longer lens."},
- {id:"rear-right",label:"Rear right",ext:true,ang:142,dist:1,tp:.86,tl:.66,asp:1.9,stand:"Off the passenger-side taillight, so the trunk and the whole passenger side both show.",height:"Taillight height, about your waist.",lens:"1x. Use the longer lens if you can back up."},
- {id:"right-side",label:"Right side",ext:true,ang:90,dist:1.1,tp:.9,tl:.84,asp:3.1,stand:"Square to the middle of the passenger side, lined up with the gap between the doors.",height:"Door-handle height, phone level.",lens:"1x from 20 feet or more. Not 0.5x."},
- {id:"front-right",label:"Front right",ext:true,ang:38,dist:1,tp:.86,tl:.66,asp:1.9,stand:"Off the passenger-side headlight, so the grille and the whole passenger side both show.",height:"Headlight to mirror height, about your waist to chest.",lens:"1x. Use the longer lens if you can back up."},
+ {id:"front-center",label:"Front center",ext:true,ang:0,dist:1,fill:.74,asp:1.3,stand:"Dead center on the front badge.",height:"Headlight height. Crouch a little.",lens:"1x or the longer lens."},
+ {id:"front-left",label:"Front left",ext:true,ang:-38,dist:1,fill:.86,asp:1.9,stand:"Off the driver-side headlight, so the grille and the whole driver side both show.",height:"Headlight to mirror height, about your waist to chest.",lens:"1x. Use the longer lens if you can back up."},
+ {id:"left-side",label:"Left side",ext:true,ang:-90,dist:1.1,fill:.92,asp:3.1,stand:"Square to the middle of the driver side, lined up with the gap between the doors.",height:"Door-handle height, phone level.",lens:"1x from 20 feet or more. Not 0.5x."},
+ {id:"rear-left",label:"Rear left",ext:true,ang:-142,dist:1,fill:.86,asp:1.9,stand:"Off the driver-side taillight, so the trunk and the whole driver side both show.",height:"Taillight height, about your waist.",lens:"1x. Use the longer lens if you can back up."},
+ {id:"rear-center",label:"Rear center",ext:true,ang:180,dist:1,fill:.74,asp:1.3,stand:"Dead center on the trunk badge.",height:"Taillight height.",lens:"1x or the longer lens."},
+ {id:"rear-right",label:"Rear right",ext:true,ang:142,dist:1,fill:.86,asp:1.9,stand:"Off the passenger-side taillight, so the trunk and the whole passenger side both show.",height:"Taillight height, about your waist.",lens:"1x. Use the longer lens if you can back up."},
+ {id:"right-side",label:"Right side",ext:true,ang:90,dist:1.1,fill:.92,asp:3.1,stand:"Square to the middle of the passenger side, lined up with the gap between the doors.",height:"Door-handle height, phone level.",lens:"1x from 20 feet or more. Not 0.5x."},
+ {id:"front-right",label:"Front right",ext:true,ang:38,dist:1,fill:.86,asp:1.9,stand:"Off the passenger-side headlight, so the grille and the whole passenger side both show.",height:"Headlight to mirror height, about your waist to chest.",lens:"1x. Use the longer lens if you can back up."},
  {id:"wheel",label:"Wheel",ext:false,outdoor:true,ang:-62,dist:.5,stand:"Crouch square to the best wheel so it fills most of the frame. Show the tire tread too.",height:"Hub height.",lens:"1x."},
+ {id:"vin",label:"VIN",ext:false,outdoor:true,manual:true,ang:-52,dist:.44,stand:"From outside, shoot the VIN plate at the bottom corner of the windshield on the driver side. No plate? Use the sticker in the driver door jamb.",height:"Close and square to the plate. Tilt slightly to kill glare.",lens:"1x, about a foot away. Tap the plate to focus."},
  {id:"dash",label:"Dash",ext:false,wide:true,ang:-90,dist:.36,stand:"At the open driver door, or centered in the back seat, aimed across the whole dash.",height:"Seat-shoulder height.",lens:"0.5x. It fits the full dash."},
  {id:"front-seats",label:"Front seats",ext:false,wide:true,ang:90,dist:.4,stand:"At the open passenger door, aimed across both seats.",height:"Seat-cushion to shoulder height.",lens:"0.5x."},
  {id:"rear-seats",label:"Rear seats",ext:false,wide:true,ang:-112,dist:.42,stand:"At the open rear door, aimed across the bench.",height:"Seat-shoulder height.",lens:"0.5x."},
@@ -321,7 +340,7 @@ function icon(kind){
 }
 function store(k,v){try{if(v===undefined)return localStorage.getItem("csc_"+k);if(v===null)localStorage.removeItem("csc_"+k);else localStorage.setItem("csc_"+k,v)}catch(e){}return null}
 
-var S={shot:SHOTS[0],shape:store("shape")||"tall",auto:store("auto")!=="0",refs:[],refActive:-1,saved:{},kept:{},photo:null,params:{b:0,s:0,h:0,c:.05},autoP:null,before:false,advice:null,gen:0,ctl:null,raf:0,count:0};
+var S={shot:SHOTS[0],shape:({square:1,reel:1,both:1})[store("shape")]?store("shape"):"both",view:"square",vin:null,vinOk:false,vinInfo:"",auto:store("auto")!=="0",refs:[],refActive:-1,saved:{},kept:{},photo:null,params:{b:0,s:0,h:0,c:.05},autoP:null,before:false,advice:null,gen:0,ctl:null,raf:0,count:0};
 var L={on:false,stream:null,model:null,modelState:"idle",box:null,boxAt:0,G:null,roll:0,pitch:0,rot:0,light:null,lenses:[],lens:null,readySince:0,lastShot:0,paused:false,said:"",saidAt:0,note:null};
 var video=$("video"),isIOS=typeof DeviceMotionEvent!=="undefined"&&typeof DeviceMotionEvent.requestPermission==="function";
 
@@ -356,7 +375,8 @@ function drawSetup(){
   $("briefTitle").textContent=S.shot.label;
   $("briefTips").innerHTML="<li><b>Stand</b><span>"+S.shot.stand+"</span></li><li><b>Height</b><span>"+S.shot.height+"</span></li><li><b>Lens</b><span>"+S.shot.lens+"</span></li>";
   $("savedCount").textContent=Object.keys(S.saved).length+" of "+SHOTS.length+" done";
-  var nk=Object.keys(S.kept).length;$("saveAllBtn").hidden=!nk;$("saveAllBtn").textContent="Save all "+nk+" photo"+(nk===1?"":"s");
+  var nk=Object.keys(S.kept).length;$("saveAllBtn").hidden=!nk;$("saveAllBtn").textContent="Save all "+nk+" kept shot"+(nk===1?"":"s");
+  drawVin();
   if(!nk)$("allMsg").hidden=true;
   [].forEach.call($("shapeSeg").children,function(x){x.setAttribute("aria-pressed",String(x.dataset.shape===S.shape))});
   var sel=$("shotSel");sel.innerHTML="";
@@ -366,7 +386,7 @@ function drawSetup(){
     sel.appendChild(og);
   });
 }
-function setShot(sh){S.shot=sh;L.box=null;L.readySince=0;drawSetup()}
+function setShot(sh){S.shot=sh;L.box=null;L.readySince=0;L.note=null;L.said="";drawSetup()}
 $("shotSel").addEventListener("change",function(){var id=this.value;setShot(SHOTS.filter(function(s){return s.id===id})[0]||SHOTS[0])});
 $("shapeSeg").addEventListener("click",function(e){
   var b=e.target.closest("button");if(!b)return;S.shape=b.dataset.shape;store("shape",S.shape);drawSetup();if(S.photo&&$("review").open)render();
@@ -536,42 +556,49 @@ function stopCamera(){
 }
 
 /* ---------- live guidance ---------- */
-function target(portrait){
-  var r=S.refs[S.refActive];
-  if(r&&r.box)return {w:r.box.w,h:r.box.h,cx:r.box.x+r.box.w/2,cy:r.box.y+r.box.h/2};
-  var w=portrait?S.shot.tp:S.shot.tl,vw=video.videoWidth,vh=video.videoHeight;
-  return {w:w,h:Math.min(.8,w*vw/S.shot.asp/vh),cx:.5,cy:.55};
+var ASPECT={square:1,reel:9/16};
+function wanted(){return S.shape==="both"?["square","reel"]:[S.shape]}
+/* the middle of the frame that survives every crop that will be made, as fractions of the frame */
+function zone(vw,vh){
+  var w=1,h=1;
+  wanted().forEach(function(k){var a=ASPECT[k],cw=Math.min(vw,vh*a);w=Math.min(w,cw/vw);h=Math.min(h,cw/a/vh)});
+  return {x:(1-w)/2,y:(1-h)/2,w:w,h:h};
+}
+function target(z){
+  var sh=S.shot,vw=video.videoWidth,vh=video.videoHeight,r=S.refs[S.refActive],fill=sh.fill,asp=sh.asp;
+  if(r&&r.box){fill=Math.min(.94,Math.max(.4,r.box.w));asp=(r.box.w*r.canvas.width)/(r.box.h*r.canvas.height)}
+  var wpx=z.w*vw*fill,hpx=wpx/asp,maxH=z.h*vh*.9;
+  if(hpx>maxH){hpx=maxH;wpx=hpx*asp}
+  return {w:wpx/vw,h:hpx/vh,cx:.5,cy:.5};
 }
 function guide(){
   var vw=video.videoWidth,vh=video.videoHeight,sh=S.shot,out=null;
   var chips={Frame:"na",Level:"na",Height:"na",Light:"na",Steady:"na"};
   function say(kind,text){if(!out)out={kind:kind,text:text}}
-  if(!vw)return {kind:"dot",text:"Starting the camera",chips:chips,ready:false,tgt:null};
-  var portrait=vh>=vw,tgt=null;
-  if(S.shape==="tall"&&!portrait)say("tilt","Turn the phone upright");
-  if(S.shape==="wide"&&portrait)say("tilt","Turn the phone sideways");
+  if(!vw)return {kind:"dot",text:"Starting the camera",chips:chips,ready:false,tgt:null,zone:null};
+  var z=zone(vw,vh),tgt=null;
+  if(sh.manual){var mw=Math.min(.86,z.w*.94);tgt={w:mw,h:mw*vw/6/vh,cx:.5,cy:.5}}
   if(sh.ext){
     if(L.modelState==="ready"){
-      var b=freshBox();tgt=target(portrait);
+      var b=freshBox();tgt=target(z);
       if(!b){chips.Frame="bad";say("dot","Point the camera at the whole car")}
       else{
-        var e=.012,cl=b.x<e,cr=b.x+b.w>1-e,ct=b.y<e,cb=b.y+b.h>1-e,ok=false,cx=b.x+b.w/2,cy=b.y+b.h/2;
-        if((cl&&cr)||(ct&&cb)||b.w>.96)say("back",hasLens("0.5x")&&L.lens==="1x"?"Step back. No room? Use 0.5x":"Step back until the whole car fits");
-        else if(cl)say("left","Aim left. The car is cut off");
-        else if(cr)say("right","Aim right. The car is cut off");
-        else if(ct)say("up","Aim up. The roof is cut off");
-        else if(cb)say("down","Aim down. The wheels are cut off");
-        else if(b.w<tgt.w-.10)say("closer",b.w<tgt.w*.55&&hasLens("Tele")&&L.lens!=="Tele"?"Step closer, or switch to Tele":"Step closer to fill the frame");
-        else if(b.w>tgt.w+.06)say("back","Step back a little");
-        else if(cx<tgt.cx-.06)say("left","Aim a little left");
-        else if(cx>tgt.cx+.06)say("right","Aim a little right");
-        else if(cy<tgt.cy-.09)say("up","Aim a little higher");
-        else if(cy>tgt.cy+.09)say("down","Aim a little lower");
+        var e=.006,cl=b.x<z.x+e,cr=b.x+b.w>z.x+z.w-e,ct=b.y<z.y+e,cb=b.y+b.h>z.y+z.h-e,ok=false,cx=b.x+b.w/2,cy=b.y+b.h/2;
+        if((cl&&cr)||(ct&&cb)||b.w>z.w*.97)say("back",hasLens("0.5x")&&L.lens==="1x"?"Step back. No room? Use 0.5x":"Step back until the car fits the bright area");
+        else if(cl)say("left","Aim left. The car is leaving the crop");
+        else if(cr)say("right","Aim right. The car is leaving the crop");
+        else if(ct)say("up","Aim up. The roof is leaving the crop");
+        else if(cb)say("down","Aim down. The wheels are leaving the crop");
+        else if(b.w<tgt.w*.84)say("closer",b.w<tgt.w*.5&&hasLens("Tele")&&L.lens!=="Tele"?"Step closer, or switch to Tele":"Step closer to fill the box");
+        else if(b.w>tgt.w*1.09)say("back","Step back a little");
+        else if(cx<tgt.cx-.07*z.w)say("left","Aim a little left");
+        else if(cx>tgt.cx+.07*z.w)say("right","Aim a little right");
+        else if(cy<tgt.cy-.1*z.h)say("up","Aim a little higher");
+        else if(cy>tgt.cy+.1*z.h)say("down","Aim a little lower");
         else ok=true;
         chips.Frame=ok?"ok":"bad";
       }
     }
-    if(L.lens==="0.5x")say("lens","0.5x stretches the car. Switch to 1x");
   }else if(sh.wide&&L.lens&&L.lens!=="0.5x"&&hasLens("0.5x"))say("lens","Switch to 0.5x to fit the whole cabin");
   if(L.G){
     if(sh.ext){
@@ -579,7 +606,7 @@ function guide(){
       else if(L.pitch<-8){chips.Height="bad";say("up","Raise the phone, then aim level")}
       else chips.Height="ok";
     }
-    if(sh.id!=="trunk"&&sh.id!=="wheel"&&sh.id!=="odometer"){
+    if(sh.id!=="trunk"&&sh.id!=="wheel"&&sh.id!=="odometer"&&!sh.manual){
       chips.Level=Math.abs(L.roll)<=2?"ok":"bad";if(chips.Level==="bad")say("tilt","Level the phone");
     }
   }
@@ -596,16 +623,17 @@ function guide(){
     chips.Light=okL?"ok":"bad";
   }
   if(L.G){chips.Steady=L.rot<(sh.ext?12:7)?"ok":"bad";if(chips.Steady==="bad")say("dot","Hold still")}
-  if(out){out.chips=chips;out.ready=false;out.tgt=tgt;return out}
+  if(out){out.chips=chips;out.ready=false;out.tgt=tgt;out.zone=z;return out}
+  if(sh.manual)return {kind:"dot",text:"Fill the box with the VIN, then tap the shutter",chips:chips,ready:false,tgt:tgt,zone:z};
   var txt=sh.ext&&L.modelState==="loading"?"Loading the car finder. Frame it by eye for now":sh.ext&&L.modelState==="failed"?"Car finder did not load. Frame it by eye":"Lined up. Hold still";
-  return {kind:"ok",text:txt,chips:chips,ready:!(sh.ext&&L.modelState!=="ready"),tgt:tgt};
+  return {kind:"ok",text:txt,chips:chips,ready:!(sh.ext&&L.modelState!=="ready"),tgt:tgt,zone:z};
 }
 function frame(){
   if(!L.on)return;
   requestAnimationFrame(frame);
   if(L.paused)return;
   var g=guide(),now=performance.now();
-  if(L.note){if(now<L.note.until)g={kind:"ok",text:L.note.text,chips:g.chips,ready:false,tgt:g.tgt};else L.note=null}
+  if(L.note){if(now<L.note.until)g={kind:"ok",text:L.note.text,chips:g.chips,ready:false,tgt:g.tgt,zone:g.zone};else L.note=null}
   var cam=$("cam"),ov=$("ov"),vw=video.videoWidth,vh=video.videoHeight;
   if(g.text!==L.said&&(now-L.saidAt>350||g.kind==="ok")){
     L.said=g.text;L.saidAt=now;
@@ -620,6 +648,10 @@ function frame(){
   if(ov.width!==Math.round(w*dpr)||ov.height!==Math.round(h*dpr)){ov.width=Math.round(w*dpr);ov.height=Math.round(h*dpr);ov.style.width=w+"px";ov.style.height=h+"px"}
   ov.style.left=(cw-w)/2+"px";ov.style.top=(ch-h)/2+"px";
   var c=ov.getContext("2d");c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,w,h);c.lineCap="round";c.lineJoin="round";
+  if(g.zone&&!S.shot.manual&&(g.zone.w<.995||g.zone.h<.995)){
+    var zz=g.zone,zx=zz.x*w,zy=zz.y*h,zw=zz.w*w,zh=zz.h*h;c.fillStyle="rgba(0,0,0,.55)";
+    c.fillRect(0,0,w,zy);c.fillRect(0,zy+zh,w,h-zy-zh);c.fillRect(0,zy,zx,zh);c.fillRect(zx+zw,zy,w-zx-zw,zh);
+  }
   if(g.tgt){
     var t=g.tgt;c.setLineDash([8,8]);c.lineWidth=2;c.strokeStyle="rgba(255,255,255,.55)";
     c.strokeRect((t.cx-t.w/2)*w,(t.cy-t.h/2)*h,t.w*w,t.h*h);c.setLineDash([]);
@@ -648,48 +680,74 @@ function capture(){
 /* ---------- review ---------- */
 function openReview(src,box,lens){
   S.gen++;if(S.ctl)S.ctl.abort();L.paused=true;
-  var m=measure(src,320);
-  S.photo={src:src,m:m,lens:lens||null,crop:null,shot:S.shot};S.advice={box:box};S.before=false;
+  var m=measure(src,320),isVin=S.shot.id==="vin";
+  S.photo={src:src,m:m,lens:lens||null,lay:null,shot:S.shot};S.advice={box:box};S.before=false;S.view=wanted()[0];
   S.autoP=autoParams(m,box||{x:.12,y:.2,w:.76,h:.62},!S.shot.ext);
   S.params={b:S.autoP.b,s:S.autoP.s,h:S.autoP.h,c:.05};
   $("verdict").hidden=true;$("moves").innerHTML="";$("saveMsg").textContent="";setBusy(null);
   ["lensNote","refNote","coachMsg"].forEach(function(i){$(i).hidden=true});
   $("beforeBtn").setAttribute("aria-pressed","false");$("beforeBtn").textContent="Show original";
-  $("claudeBtn").textContent=store("key")?"Check with Claude":"Add a Claude key to score this shot";
-  $("h-res").textContent=S.shot.label;
+  $("claudeBtn").hidden=isVin;$("claudeBtn").textContent=store("key")?"Check with Claude":"Add a Claude key to score this shot";
+  $("vinPanel").hidden=!isVin;$("h-res").textContent=S.shot.label;drawViewSeg();
   if(!$("review").open)$("review").showModal();
   setSliders();render();
+  if(isVin){
+    $("vinIn").value=S.vin||"";vinCheck();
+    if(store("key"))readVin();else if(!S.vin){$("vinStatus").className="note";$("vinStatus").textContent="Type the VIN here, or add a Claude key in Settings to have it read from the photo."}
+  }
 }
+function drawViewSeg(){var el=$("viewSeg");el.hidden=S.shape!=="both";[].forEach.call(el.children,function(x){x.setAttribute("aria-pressed",String(x.dataset.view===S.view))})}
+$("viewSeg").addEventListener("click",function(e){var b=e.target.closest("button");if(!b||!S.photo)return;S.view=b.dataset.view;drawViewSeg();render()});
 function closeReview(){if($("review").open)$("review").close()}
 $("review").addEventListener("close",function(){S.gen++;if(S.ctl)S.ctl.abort();L.paused=false;L.lastShot=performance.now();L.said=""});
-function cropRect(){
-  var W=S.photo.src.width,H=S.photo.src.height,r={x:0,y:0,w:W,h:H,fail:false,cropped:false};
-  if(S.shape==="asis")return r;
-  var a=S.shape==="tall"?3/4:4/3;
-  if(Math.abs(W/H-a)<.02)return r;
-  var cw=Math.min(W,H*a),ch=cw/a,box=S.advice&&S.advice.box,cx=.5,cy=.5;
-  if((W>H)!==(a>1)){if(!box)return r}
-  if(box){if(box.w*W>cw*.98||box.h*H>ch*.98){r.fail=true;return r}cx=box.x+box.w/2;cy=box.y+box.h/2}
-  r.w=Math.round(cw);r.h=Math.round(ch);
-  r.x=Math.round(Math.min(W-cw,Math.max(0,cx*W-cw/2)));r.y=Math.round(Math.min(H-ch,Math.max(0,cy*H-ch/2)));r.cropped=true;return r;
+function clamp(v,a,b){return Math.min(Math.max(v,a),Math.max(a,b))}
+/* where to cut the photo for one output shape; fit means the subject cannot be cropped whole */
+function layout(shape){
+  var W=S.photo.src.width,H=S.photo.src.height,a=ASPECT[shape],box=S.advice&&S.advice.box;
+  var cw=Math.min(W,H*a),ch=cw/a,cx=W/2,cy=H/2;
+  if(box){
+    var bw=box.w*W,bh=box.h*H;cx=(box.x+box.w/2)*W;cy=(box.y+box.h/2)*H;
+    if(bw>cw*.985||bh>ch*.985){
+      var sw=Math.min(W,bw*1.1),shh=Math.min(H,Math.max(bh*1.1,sw/a));if(sw/shh<a)sw=Math.min(W,shh*a);
+      return {sx:clamp(cx-sw/2,0,W-sw),sy:clamp(cy-shh/2,0,H-shh),sw:sw,sh:shh,fit:true};
+    }
+    /* same car size in every photo: tighten the crop when the car is small in it, but never below half */
+    var want=Math.max(bw/(S.photo.shot.fill||.86),bh/.78*a);
+    if(want<cw){cw=Math.max(want,cw*.5);ch=cw/a}
+  }else if(cw*ch<W*H*.5)return {sx:0,sy:0,sw:W,sh:H,fit:true};
+  return {sx:clamp(cx-cw/2,0,W-cw),sy:clamp(cy-ch/2,0,H-ch),sw:cw,sh:ch,fit:false};
+}
+function compose(shape,maxSide,toned){
+  var l=layout(shape),a=ASPECT[shape],src=S.photo.src,ow,oh;
+  if(!l.fit){ow=l.sw;oh=l.sh}else if(l.sw/l.sh>a){ow=l.sw;oh=ow/a}else{oh=l.sh;ow=oh*a}
+  var k=Math.min(1,maxSide/Math.max(ow,oh)),c=document.createElement("canvas");c.width=Math.max(1,Math.round(ow*k));c.height=Math.max(1,Math.round(oh*k));
+  var x=c.getContext("2d",{willReadFrequently:true}),m={dx:0,dy:0,ds:c.width/l.sw};
+  if(l.fit){
+    var t=document.createElement("canvas");t.width=36;t.height=Math.max(8,Math.round(36/a));
+    var ts=Math.max(t.width/l.sw,t.height/l.sh),tw=t.width/ts,th=t.height/ts;
+    t.getContext("2d").drawImage(src,l.sx+(l.sw-tw)/2,l.sy+(l.sh-th)/2,tw,th,0,0,t.width,t.height);
+    x.imageSmoothingEnabled=true;x.imageSmoothingQuality="high";x.drawImage(t,0,0,c.width,c.height);
+    x.fillStyle="rgba(8,11,15,.42)";x.fillRect(0,0,c.width,c.height);
+    var s=Math.min(c.width/l.sw,c.height/l.sh),dw=l.sw*s,dh=l.sh*s;m={dx:(c.width-dw)/2,dy:(c.height-dh)/2,ds:s};
+    x.drawImage(src,l.sx,l.sy,l.sw,l.sh,m.dx,m.dy,dw,dh);
+  }else x.drawImage(src,l.sx,l.sy,l.sw,l.sh,0,0,c.width,c.height);
+  if(toned)tone(x,c.width,c.height,S.params);
+  return {canvas:c,lay:l,map:m};
 }
 function render(){
   if(!S.photo)return;
-  var r=cropRect(),k=Math.min(1,900/Math.max(r.w,r.h)),cv=$("view");
-  cv.width=Math.round(r.w*k);cv.height=Math.round(r.h*k);
-  var ctx=cv.getContext("2d",{willReadFrequently:true});
-  ctx.drawImage(S.photo.src,r.x,r.y,r.w,r.h,0,0,cv.width,cv.height);
-  if(!S.before)tone(ctx,cv.width,cv.height,S.params);
+  var r=compose(S.view,900,!S.before),cv=$("view"),l=r.lay,m=r.map;
+  cv.width=r.canvas.width;cv.height=r.canvas.height;cv.getContext("2d").drawImage(r.canvas,0,0);
   var availW=Math.max(120,$("stagewrap").clientWidth-12),maxH=Math.max(220,window.innerHeight*.46),f=Math.min(availW/cv.width,maxH/cv.height);
   cv.style.width=Math.round(cv.width*f)+"px";cv.style.height=Math.round(cv.height*f)+"px";
   cv.setAttribute("aria-label",S.before?"Your original photo":"Your photo with the lighting fix applied");
-  var ov=$("overlay"),box=S.advice&&S.advice.box;ov.setAttribute("viewBox","0 0 "+r.w+" "+r.h);
+  var ov=$("overlay"),box=S.advice&&S.advice.box;ov.setAttribute("viewBox","0 0 "+cv.width+" "+cv.height);
   if(box&&!S.before){
-    var W=S.photo.src.width,H=S.photo.src.height,x=box.x*W-r.x,y=box.y*H-r.y,w=box.w*W,h=box.h*H,l=Math.min(w,h)*.14,sw=Math.max(r.w,r.h)/260;
-    var p=function(a,b,c,d,e,g){return "M"+a+" "+b+"L"+c+" "+d+"L"+e+" "+g};
-    ov.innerHTML='<path fill="none" stroke="#F5B21A" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round" d="'+p(x,y+l,x,y,x+l,y)+p(x+w-l,y,x+w,y,x+w,y+l)+p(x+w,y+h-l,x+w,y+h,x+w-l,y+h)+p(x+l,y+h,x,y+h,x,y+h-l)+'"/>';
+    var W=S.photo.src.width,H=S.photo.src.height,x=m.dx+(box.x*W-l.sx)*m.ds,y=m.dy+(box.y*H-l.sy)*m.ds,w=box.w*W*m.ds,h=box.h*H*m.ds,ln=Math.min(w,h)*.14,sw=Math.max(cv.width,cv.height)/260;
+    var p=function(a,b,c,d,e,g){return "M"+a.toFixed(1)+" "+b.toFixed(1)+"L"+c.toFixed(1)+" "+d.toFixed(1)+"L"+e.toFixed(1)+" "+g.toFixed(1)};
+    ov.innerHTML='<path fill="none" stroke="#F5B21A" stroke-width="'+sw.toFixed(1)+'" stroke-linecap="round" stroke-linejoin="round" d="'+p(x,y+ln,x,y,x+ln,y)+p(x+w-ln,y,x+w,y,x+w,y+ln)+p(x+w,y+h-ln,x+w,y+h,x+w-ln,y+h)+p(x+ln,y+h,x,y+h,x,y+h-ln)+'"/>';
   }else ov.innerHTML="";
-  S.photo.crop=r;drawLightNote();
+  S.photo.lay=l;drawLightNote();
 }
 function schedule(){if(S.raf)return;S.raf=requestAnimationFrame(function(){S.raf=0;render()})}
 function setSliders(){
@@ -698,14 +756,14 @@ function setSliders(){
 }
 ["sB","sS","sH"].forEach(function(id){$(id).addEventListener("input",function(){S.params.b=+$("sB").value;S.params.s=+$("sS").value;S.params.h=+$("sH").value;setSliders();schedule()})});
 function drawLightNote(){
-  var a=S.autoP,m=S.photo.m,parts=[],what=S.photo.shot.ext?"the car":S.photo.shot.outdoor?"the wheel":"the cabin";
+  var a=S.autoP,m=S.photo.m,parts=[],what=S.photo.shot.ext?"the car":S.photo.shot.manual?"the plate":S.photo.shot.outdoor?"the wheel":"the cabin";
   if(a.b>0)parts.push("brightened "+what+" about "+(a.b/100).toFixed(1)+" stops");else if(a.b<0)parts.push("pulled "+what+" down about "+(-a.b/100).toFixed(1)+" stops");
   if(a.s>12)parts.push("opened the shadows");if(a.h>12)parts.push(S.photo.shot.ext?"held back the bright sky":S.photo.shot.outdoor?"held back the bright areas":"held back the windows");
   var t=parts.length?"<b>Light fix:</b> "+parts.join(", ")+".":"<b>Exposure looks right.</b> No fix was needed.";
   if(m.clipHi>12)t+=" Part of the frame is blown out white, which editing cannot bring back.";
-  var r=S.photo.crop;
-  if(r&&r.fail)t+=" <b>The car does not fit a "+S.shape+" frame</b>, so this one is left as shot.";
-  else if(r&&r.cropped)t+=" Cropped to the "+S.shape+" shape.";
+  var l=S.photo.lay,nm=S.view==="square"?"square":"9:16";
+  if(l&&l.fit)t+=" The subject is too wide for a "+nm+" crop, so the whole shot sits on a blurred fill.";
+  else t+=" Cropped to "+nm+".";
   $("lightNote").innerHTML=t;
 }
 function setBusy(t){$("busy").hidden=!t;if(t)$("busyText").textContent=t}
@@ -719,7 +777,7 @@ function coachPrompt(){
   return "You are a car-listing photo coach. Image 1 is the photo the seller just took."
   +(n?" Images 2 to "+(n+1)+" are reference car photos the seller likes: compare image 1 with them for camera height, distance, angle and overall look.":"")
   +"\nIntended shot: "+sh.label+" ("+(sh.ext?"exterior":"interior or detail")+"). How it should be taken: "+sh.stand+" Camera height: "+sh.height
-  +"\nWanted photo shape: "+(S.shape==="tall"?"tall 3:4":S.shape==="wide"?"wide 4:3":"as shot")+". The photo is "+ph.src.width+"x"+ph.src.height+"."
+  +"\nThe photo is "+ph.src.width+"x"+ph.src.height+". It will be cropped around the subject to "+(S.shape==="both"?"a square for Facebook Marketplace and a 9:16 frame for Instagram Reels":S.shape==="square"?"a square for Facebook Marketplace":"a 9:16 frame for Instagram Reels")+", so do not ask for the phone to be turned; judge whether the subject has room for that crop."
   +"\nLens used: "+(ph.lens||"unknown")+". iPhone lenses: 0.5x ultra-wide (stretches a car's exterior, useful inside the cabin), 1x, and telephoto (flattering outside, needs distance)."
   +"\nMeasured: mean brightness "+ph.m.mean.toFixed(2)+" (0 to 1), "+ph.m.clipLo.toFixed(0)+"% crushed black, "+ph.m.clipHi.toFixed(0)+"% blown white."
   +"\n\nCompare image 1 with how professional dealer listing photos take this shot. Exterior: whole car in frame with an even margin of roughly 8 to 12 percent each side; camera at headlight-to-mirror height, not looking down on the roof; phone level; no wide-lens stretch; car clearly lit, not a silhouette; few reflections, shadows across the car, or clutter. Interior: the whole subject visible (full dash, both seats, whole bench, whole trunk opening, readable odometer); phone level with the dash line; cabin bright enough to see materials and condition; windows not blown out; no glare on screens or gauges; no clutter, trash or personal items; steering wheel straight; nothing blurred."
@@ -729,27 +787,86 @@ function coachPrompt(){
   +'"lens":{"use":"0.5x|1x|Tele","switch":false,"why":"12 words max"},"light":{"dark":false,"blown":false,"note":"14 words max"},"ref":"16 words max on how it differs from the references, or empty"}'
   +"\nRules: score is 0 to 100 for listing quality, 80 or more means listing-ready. box is the main subject's bounding box as fractions of image 1 (x and y are the top-left corner). moves holds at most 3 changes for the retake, most important first: up means raise the phone, down means lower it, left and right mean step sideways from the photographer's point of view, back means step away, closer means step toward, tilt means level or rotate the phone, lens means change lens, light means move relative to the sun, open doors or add light, other covers tidying or straightening the wheel. Give real amounts where you can. If the shot is listing-ready return an empty moves list. If the subject is not in the photo set found to false.";
 }
-function claudeCheck(){
-  var key=store("key");if(!key){openSettings();return}
-  var gen=++S.gen;if(S.ctl)S.ctl.abort();var ctl=new AbortController();S.ctl=ctl;
-  setBusy("Claude is checking the shot");showMsg("");
-  var blobs=[canvasBlob(toCanvas(S.photo.src,1280),.82)].concat(S.refs.map(function(r){return Promise.resolve(r.blob)}));
-  Promise.all(blobs).then(function(bs){return Promise.all(bs.map(b64))}).then(function(datas){
+/* one request to Claude with images and a prompt; resolves with the JSON object in the reply */
+function askClaude(blobs,prompt,maxTokens,signal){
+  var key=store("key");
+  return Promise.all(blobs.map(b64)).then(function(datas){
     var content=datas.map(function(d){return {type:"image",source:{type:"base64",media_type:"image/jpeg",data:d}}});
-    content.push({type:"text",text:coachPrompt()});
-    return fetch(API+"messages",{method:"POST",headers:headers(key),signal:ctl.signal,body:JSON.stringify({model:modelName(),max_tokens:900,messages:[{role:"user",content:content}]})});
+    content.push({type:"text",text:prompt});
+    return fetch(API+"messages",{method:"POST",headers:headers(key),signal:signal,body:JSON.stringify({model:modelName(),max_tokens:maxTokens,messages:[{role:"user",content:content}]})});
   }).then(function(r){return r.json().catch(function(){return {}}).then(function(j){return {ok:r.ok,status:r.status,j:j}})}).then(function(o){
-    if(gen!==S.gen)return;
     if(!o.ok)throw {status:o.status,msg:o.j&&o.j.error&&o.j.error.message};
     var text=(o.j.content||[]).filter(function(c){return c.type==="text"}).map(function(c){return c.text}).join("");
     var a=text.indexOf("{"),z=text.lastIndexOf("}");if(a<0||z<=a)throw {status:0,msg:"no json"};
-    setBusy(null);showAdvice(JSON.parse(text.slice(a,z+1)));
-  }).catch(function(e){
-    if(gen!==S.gen||(e&&e.name==="AbortError"))return;setBusy(null);
-    var s=e&&e.status;
-    showMsg(s===401||s===403?"That API key was not accepted. Check it in Settings.":s===404?"That model name was not found. Pick another in Settings.":s===429?"Your API account is rate limited or out of credit. Try again shortly.":s===0?"Claude's answer could not be read. Tap the check again.":s?"Claude returned an error ("+s+"). "+(e.msg?String(e.msg).slice(0,120):""):"Could not reach Claude. Check your connection and try again.");
+    try{return JSON.parse(text.slice(a,z+1))}catch(e){throw {status:0,msg:"bad json"}}
   });
 }
+function claudeErr(e){
+  var s=e&&e.status;
+  return s===401||s===403?"That API key was not accepted. Check it in Settings.":s===404?"That model name was not found. Pick another in Settings.":s===429?"Your API account is rate limited or out of credit. Try again shortly.":s===0?"Claude's answer could not be read. Try again.":s?"Claude returned an error ("+s+"). "+(e.msg?String(e.msg).slice(0,120):""):"Could not reach Claude. Check your connection and try again.";
+}
+function claudeCheck(){
+  if(!store("key")){openSettings();return}
+  var gen=++S.gen;if(S.ctl)S.ctl.abort();var ctl=new AbortController();S.ctl=ctl;
+  setBusy("Claude is checking the shot");showMsg("");
+  canvasBlob(toCanvas(S.photo.src,1280),.82).then(function(b){
+    return askClaude([b].concat(S.refs.map(function(r){return r.blob})),coachPrompt(),900,ctl.signal);
+  }).then(function(j){if(gen!==S.gen)return;setBusy(null);showAdvice(j)}).catch(function(e){
+    if(gen!==S.gen||(e&&e.name==="AbortError"))return;setBusy(null);showMsg(claudeErr(e));
+  });
+}
+
+/* ---------- VIN ---------- */
+var VMAP={A:1,B:2,C:3,D:4,E:5,F:6,G:7,H:8,J:1,K:2,L:3,M:4,N:5,P:7,R:9,S:2,T:3,U:4,V:5,W:6,X:7,Y:8,Z:9},VWT=[8,7,6,5,4,3,2,10,0,9,8,7,6,5,4,3,2],VYEAR="ABCDEFGHJKLMNPRSTVWXY123456789";
+function vinClean(t){return String(t||"").toUpperCase().replace(/[^A-Z0-9]/g,"").replace(/[OQ]/g,"0").replace(/I/g,"1").slice(0,17)}
+function vinValid(v){
+  if(v.length!==17)return false;var sum=0;
+  for(var i=0;i<17;i++){var ch=v.charAt(i),n=ch>="0"&&ch<="9"?+ch:VMAP[ch];if(n===undefined)return false;sum+=n*VWT[i]}
+  var r=sum%11;return v.charAt(8)===(r===10?"X":String(r));
+}
+function vinYear(v){var i=VYEAR.indexOf(v.charAt(9));return i<0?null:(/[A-Z]/.test(v.charAt(6))?2010:1980)+i}
+function drawVin(){
+  $("vinRow").hidden=!S.vin;$("vinShow").textContent=S.vin||"";
+  $("vinInfo").hidden=!(S.vin&&S.vinInfo);$("vinInfo").textContent=S.vinInfo||"";
+}
+function vinCheck(extra){
+  var v=vinClean($("vinIn").value),st=$("vinStatus");if($("vinIn").value!==v)$("vinIn").value=v;
+  if(v.length<17){S.vin=null;S.vinOk=false;S.vinInfo="";st.className="note";st.textContent=v.length?v.length+" of 17 characters.":"";drawVin();return}
+  var changed=S.vin!==v;S.vin=v;S.vinOk=vinValid(v);if(changed)S.vinInfo="";
+  if(S.vinOk){var y=vinYear(v);st.className="note s-good";st.textContent="Check digit matches."+(S.vinInfo?" "+S.vinInfo+".":y?" Model year "+y+".":"");if(changed)decodeVin(v)}
+  else{st.className="note s-bad";st.textContent="The check digit does not match, so one character is probably wrong. Compare each one with the plate."+(extra||"")+" Some imported vehicles do not use a check digit."}
+  drawVin();
+}
+function decodeVin(v){
+  fetch("https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/"+encodeURIComponent(v)+"?format=json").then(function(r){return r.json()}).then(function(j){
+    var d=j&&j.Results&&j.Results[0];if(!d||S.vin!==v)return;
+    var t=[d.ModelYear,d.Make,d.Model,d.Trim].filter(function(x){return x&&String(x).trim()}).join(" ");
+    if(t){S.vinInfo=t;drawVin();if(!$("vinPanel").hidden&&S.vinOk){$("vinStatus").textContent="Check digit matches. "+t+"."}}
+  }).catch(function(){});
+}
+function readVin(){
+  var st=$("vinStatus");if(!store("key")){openSettings();return}
+  var gen=++S.gen;if(S.ctl)S.ctl.abort();var ctl=new AbortController();S.ctl=ctl;
+  st.className="note";st.textContent="Reading the VIN from the photo";
+  canvasBlob(toCanvas(S.photo.src,1568),.9).then(function(b){
+    return askClaude([b],"This is a close-up photo of a vehicle identification number (VIN): a dashboard plate seen through the windshield, a door-jamb label, or a stamped plate. Read the 17-character VIN exactly as printed. A VIN uses digits and capital letters and never contains I, O or Q. Do not guess from a barcode. Reply with only JSON: {\"found\":true,\"vin\":\"17 characters\",\"unsure\":[positions from 1 to 17 that you could not read with confidence]}. If no VIN is readable set found to false.",300,ctl.signal);
+  }).then(function(j){
+    if(gen!==S.gen)return;
+    if(!j||j.found===false||!j.vin){st.className="note s-bad";st.textContent="No VIN could be read from this photo. Get closer, cut the glare and retake, or type it in.";return}
+    $("vinIn").value=vinClean(j.vin);
+    var u=(Array.isArray(j.unsure)?j.unsure:[]).filter(function(n){return n>=1&&n<=17});
+    vinCheck(u.length?" Least certain: position "+u.join(", ")+".":"");
+  }).catch(function(e){if(gen!==S.gen||(e&&e.name==="AbortError"))return;st.className="note s-bad";st.textContent=claudeErr(e)});
+}
+$("vinIn").addEventListener("input",function(){vinCheck()});
+$("vinRead").onclick=function(){if(S.photo)readVin()};
+function copyVin(btn){
+  var v=S.vin||vinClean($("vinIn").value);if(!v)return;
+  var done=function(ok){var o=btn.textContent;btn.textContent=ok?"Copied":"Copy failed";setTimeout(function(){btn.textContent=o},1400)};
+  try{navigator.clipboard.writeText(v).then(function(){done(true)},function(){done(false)})}catch(e){done(false)}
+}
+$("vinCopy").onclick=function(){copyVin(this)};$("vinCopy2").onclick=function(){copyVin(this)};
+
 function num(v,d){v=+v;return isFinite(v)?v:d}
 function showAdvice(j){
   if(j.found===false){$("verdict").hidden=true;$("moves").innerHTML="";showMsg("Claude could not find the "+S.photo.shot.label.toLowerCase()+" in this photo. Retake it with the whole subject in frame.");return}
@@ -778,44 +895,43 @@ function showAdvice(j){
 }
 
 /* ---------- save ---------- */
-function finalBlob(){
-  var r=S.photo.crop||cropRect(),c=document.createElement("canvas");c.width=r.w;c.height=r.h;
-  var x=c.getContext("2d",{willReadFrequently:true});x.drawImage(S.photo.src,r.x,r.y,r.w,r.h,0,0,r.w,r.h);tone(x,r.w,r.h,S.params);return canvasBlob(c,.92);
+/* every wanted shape of the current shot, as files */
+function finalFiles(){
+  var sh=S.photo.shot,n=("0"+(SHOTS.indexOf(sh)+1)).slice(-2);
+  return Promise.all(wanted().map(function(k){
+    return canvasBlob(compose(k,k==="reel"?2560:2160,true).canvas,.93).then(function(b){return {blob:b,name:n+"-"+sh.id+"-"+k+".jpg"}});
+  }));
+}
+function shareOrDownload(list){
+  var files=[];try{files=list.map(function(k){return new File([k.blob],k.name,{type:"image/jpeg"})})}catch(e){files=[]}
+  if(files.length&&navigator.canShare&&navigator.canShare({files:files}))return navigator.share({files:files}).then(function(){return "shared"});
+  list.forEach(function(k,i){setTimeout(function(){var a=document.createElement("a");a.href=URL.createObjectURL(k.blob);a.download=k.name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},4000)},i*350)});
+  return Promise.resolve("downloaded");
 }
 $("saveBtn").onclick=function(){
-  if(!S.photo)return;var btn=this,msg=$("saveMsg");btn.disabled=true;msg.textContent="Preparing the photo";
-  finalBlob().then(function(blob){
-    S.count++;var name="car-"+S.photo.shot.id+"-"+S.count+".jpg",file;
-    try{file=new File([blob],name,{type:"image/jpeg"})}catch(e){file=null}
-    if(file&&navigator.canShare&&navigator.canShare({files:[file]})){
-      return navigator.share({files:[file]}).then(function(){done()},function(e){if(e&&e.name==="AbortError"){msg.textContent="Not saved. Tap Save when you are ready.";return}hold(blob)});
-    }
-    var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},4000);done();
-  }).catch(function(){msg.textContent="The photo could not be saved. Take a screenshot instead."}).then(function(){btn.disabled=false});
-  function hold(blob){var im=$("holdImg");if(im.src)URL.revokeObjectURL(im.src);im.src=URL.createObjectURL(blob);$("holdDlg").showModal();done()}
-  function done(){msg.textContent="Saved.";S.saved[S.photo.shot.id]=true;drawSetup()}
+  if(!S.photo)return;var btn=this,msg=$("saveMsg"),sh=S.photo.shot;btn.disabled=true;msg.textContent="Preparing the photo";
+  finalFiles().then(shareOrDownload).then(function(how){
+    msg.textContent=how==="shared"?"Sent to the share sheet. Choose Save Image to put it in Photos.":"Downloaded.";S.saved[sh.id]=true;drawSetup();
+  }).catch(function(e){msg.textContent=e&&e.name==="AbortError"?"Not saved. Tap again when you are ready.":"The photo could not be saved here. Use Keep, then Save all."}).then(function(){btn.disabled=false});
 };
 
 /* keep the shot and move to the next one that is not done */
 function nextShot(cur){var i=SHOTS.indexOf(cur);for(var k=1;k<=SHOTS.length;k++){var s=SHOTS[(i+k)%SHOTS.length];if(!S.kept[s.id])return s}return null}
 $("keepBtn").onclick=function(){
   if(!S.photo)return;var btn=this,sh=S.photo.shot;btn.disabled=true;
-  finalBlob().then(function(blob){
-    S.kept[sh.id]={blob:blob,name:"car-"+sh.id+".jpg"};S.saved[sh.id]=true;
+  finalFiles().then(function(files){
+    S.kept[sh.id]=files;S.saved[sh.id]=true;
     var next=nextShot(sh);closeReview();
     if(next){setShot(next);L.note={text:"Kept. Next: "+next.label,until:performance.now()+2400};L.said=""}
     else{if(L.on)stopCamera();else drawSetup();$("allMsg").hidden=false;$("allMsg").textContent="Every shot is done. Tap Save all to put them in your Photos."}
   }).catch(function(){$("saveMsg").textContent="The photo could not be kept. Try again."}).then(function(){btn.disabled=false});
 };
 $("saveAllBtn").onclick=function(){
-  var list=SHOTS.filter(function(s){return S.kept[s.id]}).map(function(s){return S.kept[s.id]}),files=[],msg=$("allMsg");msg.hidden=false;
-  try{files=list.map(function(k){return new File([k.blob],k.name,{type:"image/jpeg"})})}catch(e){files=[]}
-  if(files.length&&navigator.canShare&&navigator.canShare({files:files})){
-    navigator.share({files:files}).then(function(){msg.textContent="Sent to the share sheet. Choose Save "+files.length+" Images to put them in Photos."},function(e){msg.textContent=e&&e.name==="AbortError"?"Not saved yet. Tap Save all when you are ready.":"Sharing did not work here. Open each shot and use Save only this one."});
-    return;
-  }
-  list.forEach(function(k,i){setTimeout(function(){var a=document.createElement("a");a.href=URL.createObjectURL(k.blob);a.download=k.name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},4000)},i*350)});
-  msg.textContent="Downloading "+list.length+" photos.";
+  var list=[],msg=$("allMsg");msg.hidden=false;
+  SHOTS.forEach(function(s){if(S.kept[s.id])list=list.concat(S.kept[s.id])});
+  shareOrDownload(list).then(function(how){
+    msg.textContent=how==="shared"?"Sent to the share sheet. Choose Save "+list.length+" Images to put them in Photos.":"Downloading "+list.length+" photos.";
+  }).catch(function(e){msg.textContent=e&&e.name==="AbortError"?"Not saved yet. Tap Save all when you are ready.":"Sharing did not work here. Open each shot and use Save only this one."});
 };
 
 /* ---------- references ---------- */
@@ -886,7 +1002,7 @@ $("holdClose").onclick=function(){$("holdDlg").close()};
 $("wipeBtn").onclick=function(){
   S.gen++;if(S.ctl)S.ctl.abort();S.refs.forEach(function(r){URL.revokeObjectURL(r.url)});
   S.refs=[];S.refActive=-1;S.photo=null;S.advice=null;S.saved={};S.kept={};S.count=0;
-  ["key","model","shape","auto"].forEach(function(k){store(k,null)});S.shape="tall";S.auto=true;$("autoBtn").setAttribute("aria-pressed","true");
+  ["key","model","shape","auto"].forEach(function(k){store(k,null)});S.shape="both";S.vin=null;S.vinOk=false;S.vinInfo="";S.auto=true;$("autoBtn").setAttribute("aria-pressed","true");
   var cv=$("view");cv.width=cv.height=1;drawRefs();drawSetup();$("legal").close();
 };
 window.addEventListener("resize",function(){if(S.photo&&$("review").open)schedule()});
