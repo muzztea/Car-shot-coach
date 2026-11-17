@@ -153,7 +153,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
       <div id="plan" role="img" aria-label="Where to stand"></div>
       <div><h3 id="briefTitle"></h3><ul id="briefTips"></ul></div>
     </div>
-    <div class="row">
+    <div class="row" hidden>
       <span id="l-shape">Save photos as</span>
       <div class="seg" role="group" aria-labelledby="l-shape" id="shapeSeg">
         <button type="button" data-shape="square">Square</button>
@@ -161,7 +161,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
         <button type="button" data-shape="both">Both</button>
       </div>
     </div>
-    <p class="fine">Square suits Facebook Marketplace and 9:16 suits Instagram Reels. Hold the phone either way and use any lens: every photo is cropped to the same shape.</p>
+    <p class="fine">Every photo is cropped to the same square, which fits Facebook Marketplace and Instagram posts. Hold the phone either way and use any lens.</p>
     <div class="row" id="vinRow" hidden><span>VIN <b class="vintext" id="vinShow"></b></span><button class="btn small" type="button" id="vinCopy2">Copy</button></div>
     <p class="fine" id="vinInfo" hidden></p>
   </section>
@@ -276,7 +276,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
     <h3 id="legalTitle">Privacy &amp; terms</h3>
     <section><h4>Privacy</h4><p>The live camera view, motion readings and photos are processed on your phone and are not uploaded. No accounts, analytics or ads. The exceptions are the optional Claude features, which use your own key: the Claude check sends that photo and your reference photos to Anthropic's API, and the VIN reader sends the VIN photo. A VIN you confirm is also sent to the U.S. NHTSA's free decoder to look up the year, make and model. The VIN is not stored after you close the tab. Saved photos carry no location or other metadata.</p></section>
     <section><h4>Third parties</h4><p>Four, each for one purpose: jsDelivr serves the open-source TensorFlow.js code that finds the car, Google Cloud Storage serves that model's file, Anthropic answers the Claude check and reads the VIN if you add a key, and NHTSA decodes a VIN. No other SDKs or trackers.</p></section>
-    <section><h4>Cookies and storage</h4><p>No cookies. Your shape and auto-shoot choices, and your API key if you add one, are kept in this browser's local storage so the tool works next time. Nothing optional is stored, so there is no consent banner.</p></section>
+    <section><h4>Cookies and storage</h4><p>No cookies. Your auto-shoot choice, and your API key if you add one, are kept in this browser's local storage so the tool works next time. Nothing optional is stored, so there is no consent banner.</p></section>
     <section><h4>Terms of use</h4><p>The coaching is guidance, not a guarantee of a sale or a price. The lighting fix changes exposure only. Do not use edits to hide damage or misdescribe a vehicle; you are responsible for what your listing shows. Watch your surroundings while you move around the car.</p></section>
     <section><h4>Price and refunds</h4><p>This tool is free, with no fees and nothing to refund. The optional Claude check is billed by Anthropic to your own API account.</p></section>
     <section><h4>Delete your data</h4><p>Photos live in this tab until you close it. The button below wipes them along with your saved settings and API key.</p><p style="margin-top:8px"><button class="btn small" type="button" id="wipeBtn">Delete everything now</button></p></section>
@@ -340,7 +340,7 @@ function icon(kind){
 }
 function store(k,v){try{if(v===undefined)return localStorage.getItem("csc_"+k);if(v===null)localStorage.removeItem("csc_"+k);else localStorage.setItem("csc_"+k,v)}catch(e){}return null}
 
-var S={shot:SHOTS[0],shape:({square:1,reel:1,both:1})[store("shape")]?store("shape"):"both",view:"square",vin:null,vinOk:false,vinInfo:"",auto:store("auto")!=="0",refs:[],refActive:-1,saved:{},kept:{},photo:null,params:{b:0,s:0,h:0,c:.05},autoP:null,before:false,advice:null,gen:0,ctl:null,raf:0,count:0};
+var S={shot:SHOTS[0],shape:"square",view:"square",vin:null,vinOk:false,vinInfo:"",auto:store("auto")!=="0",refs:[],refActive:-1,saved:{},kept:{},photo:null,params:{b:0,s:0,h:0,c:.05},autoP:null,before:false,advice:null,gen:0,ctl:null,raf:0,count:0};
 var L={on:false,stream:null,model:null,modelState:"idle",box:null,boxAt:0,G:null,roll:0,pitch:0,rot:0,light:null,lenses:[],lens:null,readySince:0,lastShot:0,paused:false,said:"",saidAt:0,note:null};
 var video=$("video"),isIOS=typeof DeviceMotionEvent!=="undefined"&&typeof DeviceMotionEvent.requestPermission==="function";
 
@@ -1001,7 +1001,7 @@ $("holdClose").onclick=function(){$("holdDlg").close()};
 $("wipeBtn").onclick=function(){
   S.gen++;if(S.ctl)S.ctl.abort();S.refs.forEach(function(r){URL.revokeObjectURL(r.url)});
   S.refs=[];S.refActive=-1;S.photo=null;S.advice=null;S.saved={};S.kept={};S.count=0;
-  ["key","model","shape","auto"].forEach(function(k){store(k,null)});S.shape="both";S.vin=null;S.vinOk=false;S.vinInfo="";S.auto=true;$("autoBtn").setAttribute("aria-pressed","true");
+  ["key","model","shape","auto"].forEach(function(k){store(k,null)});S.shape="square";S.vin=null;S.vinOk=false;S.vinInfo="";S.auto=true;$("autoBtn").setAttribute("aria-pressed","true");
   var cv=$("view");cv.width=cv.height=1;drawRefs();drawSetup();$("legal").close();
 };
 window.addEventListener("resize",function(){if(S.photo&&$("review").open)schedule()});
