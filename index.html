@@ -345,7 +345,8 @@ function store(k,v){try{if(v===undefined)return localStorage.getItem("csc_"+k);i
 var S={shot:SHOTS[0],shape:"square",view:"square",vin:null,vinOk:false,vinInfo:"",auto:store("auto")!=="0",refs:[],refActive:-1,saved:{},kept:{},photo:null,params:{b:0,s:0,h:0,c:.05},autoP:null,before:false,advice:null,gen:0,ctl:null,raf:0,count:0};
 var L={on:false,stream:null,model:null,modelState:"idle",box:null,boxAt:0,G:null,roll:0,pitch:0,rot:0,light:null,lenses:[],lens:null,readySince:0,lastShot:0,paused:false,said:"",saidAt:0,note:null,flat:false};
 var video=$("video"),isIOS=typeof DeviceMotionEvent!=="undefined"&&typeof DeviceMotionEvent.requestPermission==="function";
-L.sgn=isIOS?-1:1;L.flip=0;L.q=0;
+L.sgn=isIOS?-1:1;L.flip=0;L.q=0;L.scan={busy:false,n:0,last:"",stop:false,msg:"",ctl:null,at:0};
+function resetScan(){if(L.scan.ctl)L.scan.ctl.abort();L.scan={busy:false,n:0,last:"",stop:false,msg:"",ctl:null,at:0}}
 /* the camera frame turned upright: q is how far the phone is rotated from upright, in quarter turns (0, 90, -90) */
 function upright(src,q,maxSide){
   var sw=src.videoWidth||src.naturalWidth||src.width,sh=src.videoHeight||src.naturalHeight||src.height,k=Math.min(1,maxSide/Math.max(sw,sh)),side=Math.abs(q)===90;
@@ -396,7 +397,7 @@ function drawSetup(){
     sel.appendChild(og);
   });
 }
-function setShot(sh){S.shot=sh;L.box=null;L.readySince=0;L.note=null;L.said="";drawSetup()}
+function setShot(sh){S.shot=sh;L.box=null;L.readySince=0;L.note=null;L.said="";resetScan();drawSetup()}
 $("shotSel").addEventListener("change",function(){var id=this.value;setShot(SHOTS.filter(function(s){return s.id===id})[0]||SHOTS[0])});
 $("shapeSeg").addEventListener("click",function(e){
   var b=e.target.closest("button");if(!b)return;S.shape=b.dataset.shape;store("shape",S.shape);drawSetup();if(S.photo&&$("review").open)render();
@@ -602,6 +603,7 @@ function guide(){
   var z=zone(vw,vh),tgt=null;
   var crop=null,mq=Math.min(vw,vh);
   if(!sh.ext)crop={x:(vw-mq)/2,y:(vh-mq)/2,size:mq};
+  if(sh.manual)tgt={w:.9*mq/vw,h:.2*mq/vh,cx:.5,cy:.5};
   if(sh.ext){
     if(L.modelState==="ready"){
       var b=freshBox();
@@ -643,7 +645,7 @@ function guide(){
   }
   if(L.G){chips.Steady=L.rot<(sh.ext?12:7)?"ok":"bad";if(chips.Steady==="bad")say("dot","Hold still")}
   if(out){out.chips=chips;out.ready=false;out.tgt=tgt;out.zone=z;out.crop=crop;return out}
-  if(sh.manual)return {kind:"dot",text:"Fit the VIN inside the box, then tap the shutter",chips:chips,ready:false,tgt:tgt,zone:z};
+  if(sh.manual)return {kind:"dot",text:store("key")&&!L.scan.stop?(L.scan.msg||"Hold the VIN on the line. Scanning"):(L.scan.msg||"Fit the VIN inside the box, then tap the shutter"),chips:chips,ready:false,tgt:tgt,zone:z};
   var txt=sh.ext&&L.modelState==="loading"?"Loading the car finder. Frame it by eye for now":sh.ext&&L.modelState==="failed"?"Car finder did not load. Frame it by eye":"Lined up. Hold still";
   return {kind:"ok",text:txt,chips:chips,ready:!(sh.ext&&L.modelState!=="ready"),tgt:tgt,zone:z,crop:crop};
 }
@@ -678,6 +680,7 @@ function frame(){
   if(g.tgt){
     var t=g.tgt;c.setLineDash([8,8]);c.lineWidth=2;c.strokeStyle="rgba(255,255,255,.55)";
     c.strokeRect((t.cx-t.w/2)*uw,(t.cy-t.h/2)*uh,t.w*uw,t.h*uh);c.setLineDash([]);
+    if(S.shot.manual){c.lineWidth=3;c.strokeStyle="#F5B21A";c.beginPath();c.moveTo((t.cx-t.w/2+.03)*uw,(t.cy+t.h*.28)*uh);c.lineTo((t.cx+t.w/2-.03)*uw,(t.cy+t.h*.28)*uh);c.stroke()}
   }
   var b=S.shot.ext?freshBox():null;
   if(b){
@@ -714,7 +717,8 @@ function openReview(src,box,lens,roll){
   $("vinPanel").hidden=!isVin;$("h-res").textContent=S.shot.label;drawViewSeg();
   if(!$("review").open)$("review").showModal();
   setSliders();render();
-  if(isVin){
+  if(isVin&&S.scanHit){$("vinIn").value=S.scanHit;S.scanHit=null;vinCheck()}
+  else if(isVin){
     $("vinIn").value=S.vin||"";vinCheck();
     if(store("key"))readVin();else if(!S.vin){$("vinStatus").className="note";$("vinStatus").textContent="Type the VIN here, or add a Claude key in Settings to have it read from the photo."}
   }
@@ -722,7 +726,7 @@ function openReview(src,box,lens,roll){
 function drawViewSeg(){var el=$("viewSeg");el.hidden=S.shape!=="both";[].forEach.call(el.children,function(x){x.setAttribute("aria-pressed",String(x.dataset.view===S.view))})}
 $("viewSeg").addEventListener("click",function(e){var b=e.target.closest("button");if(!b||!S.photo)return;S.view=b.dataset.view;drawViewSeg();render()});
 function closeReview(){if($("review").open)$("review").close()}
-$("review").addEventListener("close",function(){S.gen++;if(S.ctl)S.ctl.abort();L.paused=false;L.lastShot=performance.now();L.said=""});
+$("review").addEventListener("close",function(){S.gen++;if(S.ctl)S.ctl.abort();L.paused=false;L.lastShot=performance.now();L.said="";if(S.shot.id==="vin")resetScan()});
 function clamp(v,a,b){return Math.min(Math.max(v,a),Math.max(a,b))}
 function fillFor(sh){var r=S.refs[S.refActive];return r&&r.box?Math.min(.94,Math.max(.4,r.box.w)):(sh.fill||.86)}
 /* the square to keep around the car, in pixels of a W x H frame: tight enough that the car fills it the same
@@ -906,6 +910,32 @@ function readVin(){
     vinCheck(u.length?" Least certain: position "+u.join(", ")+".":"");
   }).catch(function(e){if(gen!==S.gen||(e&&e.name==="AbortError"))return;st.className="note s-bad";st.textContent=claudeErr(e)});
 }
+/* live VIN scan: while the VIN shot is open, read the strip on the guide line about once a second and
+   take the photo by itself as soon as a VIN with a matching check digit appears */
+function scanTick(){
+  var sc=L.scan,now=performance.now();
+  if(!L.on||L.paused||S.shot.id!=="vin"||!store("key")||sc.busy||sc.stop||!video.videoWidth||now-sc.at<1100)return;
+  if(L.G&&L.rot>14){sc.msg="Hold still. Scanning";return}
+  if(sc.n>=25){sc.stop=true;sc.msg="Could not read it. Get closer, then tap the shutter";return}
+  sc.busy=true;sc.n++;sc.msg="Hold the VIN on the line. Scanning";
+  var u=upright(video,L.q,4096),m=Math.min(u.width,u.height),bw=.9*m,bh=.2*m,k=Math.min(1,1280/bw);
+  var t=document.createElement("canvas");t.width=Math.round(bw*k);t.height=Math.round(bh*k);
+  t.getContext("2d").drawImage(u,(u.width-bw)/2,(u.height-bh)/2,bw,bh,0,0,t.width,t.height);
+  var ctl=new AbortController();sc.ctl=ctl;
+  canvasBlob(t,.9).then(function(b){
+    return askClaude([b],"This is a strip cut from a live camera frame aimed at a vehicle identification number (VIN) on a dashboard plate behind a windshield, a door-jamb label or a stamped plate. If a complete 17-character VIN is clearly readable, return it exactly. A VIN uses digits and capital letters and never contains I, O or Q. Do not guess missing or blurred characters. Reply with only JSON: {\"found\":true,\"vin\":\"17 characters\"} or {\"found\":false}.",80,ctl.signal);
+  }).then(function(j){
+    if(L.scan!==sc||S.shot.id!=="vin"||L.paused)return;
+    var v=j&&j.found!==false?vinClean(j.vin):"";
+    if(v.length===17&&(vinValid(v)||v===sc.last)){S.scanHit=v;sc.stop=true;sc.msg="";if(navigator.vibrate)navigator.vibrate(60);capture();return}
+    if(v.length===17)sc.last=v;
+    sc.msg=v.length===17?"Almost. Hold steady":"Hold the VIN on the line. Scanning";
+  }).catch(function(e){
+    if(L.scan!==sc||(e&&e.name==="AbortError"))return;
+    if(e&&e.status&&e.status!==0){sc.stop=true;sc.msg=e.status===401||e.status===403?"API key not accepted. Tap the shutter instead":e.status===429?"Claude is rate limited. Tap the shutter instead":"Scan error "+e.status+". Tap the shutter instead"}
+  }).then(function(){sc.busy=false;sc.at=performance.now()});
+}
+setInterval(scanTick,300);
 $("vinIn").addEventListener("input",function(){vinCheck()});
 $("vinRead").onclick=function(){if(S.photo)readVin()};
 function copyVin(btn){
