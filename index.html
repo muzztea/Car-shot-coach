@@ -244,6 +244,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
     <div class="actions">
       <button class="btn small" type="button" id="beforeBtn" aria-pressed="false">Show original</button>
       <button class="btn small" type="button" id="resetBtn">Reset to auto</button>
+      <button class="btn small full" type="button" id="stageBtn" aria-pressed="false">Put on turntable</button>
       <button class="btn small full" type="button" id="claudeBtn">Check with Claude</button>
       <button class="btn" type="button" id="retakeBtn">Retake</button>
       <button class="btn primary" type="button" id="keepBtn" style="grid-column:auto;font-size:17px">Keep, next</button>
@@ -259,6 +260,9 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
     <h2>Match a reference photo</h2>
     <p class="fine">Add up to 3 car photos you like. Tap one to make it the target: every photo is then cropped so the car fills the frame the way it does in that photo.</p>
     <div class="refs" id="refs"><button class="btn small" type="button" id="refBtn">Add photo</button></div>
+    <h2>Turntable banner</h2>
+    <p class="fine">Optional. This line is printed across the bottom of turntable photos, for example your phone number. Leave it empty for no banner.</p>
+    <label class="field" for="bannerIn">Banner text<input id="bannerIn" type="text" maxlength="40" autocomplete="off" placeholder="CALL OR TEXT (555) 555-5555"></label>
     <h2>Claude check</h2>
     <p class="fine">Optional. Paste your Claude API key to have Claude score each saved shot against listing-photo standards and your references. The key is kept only in this browser and is sent only to Anthropic. It is billed to your API account, not your Claude plan.</p>
     <label class="field" for="keyIn">API key<input id="keyIn" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-..."></label>
@@ -285,7 +289,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:28px}
     <section><h4>Children</h4><p>Not directed at children under 13 and collects no personal data from anyone.</p></section>
     <section><h4>Email</h4><p>This tool sends no email, so there is nothing to unsubscribe from.</p></section>
     <section><h4>Accessibility</h4><p>Works with a keyboard and screen reader, and each live instruction is announced. Tell the operator if something is hard to use.</p></section>
-    <section><h4>Operator and licences</h4><p>Operated by Marawan Ahmed. Uses TensorFlow.js and the COCO-SSD model under the Apache 2.0 licence. Text is set in your device's own fonts. Diagrams and icons were drawn for this page.</p></section>
+    <section><h4>Operator and licences</h4><p>Operated by Marawan Ahmed. Uses TensorFlow.js and the COCO-SSD model under the Apache 2.0 licence. The turntable cut-out uses IMG.LY's background-removal library under the AGPL-3.0 licence; this site's full source is public at github.com/muzztea/Car-shot-coach. The cut-out model is served from this site and runs on your phone. Text is set in your device's own fonts. Diagrams and icons were drawn for this page.</p></section>
     <button class="btn" type="button" id="legalClose">Close</button>
   </div>
 </dialog>
@@ -707,7 +711,7 @@ function capture(){
 function openReview(src,box,lens,roll){
   S.gen++;if(S.ctl)S.ctl.abort();L.paused=true;
   var m=measure(src,320),isVin=S.shot.id==="vin";
-  S.photo={src:src,m:m,lens:lens||null,lay:null,shot:S.shot,roll:roll||0};S.advice={box:box};S.before=false;S.view=wanted()[0];
+  S.photo={src:src,m:m,lens:lens||null,lay:null,shot:S.shot,roll:roll||0,stage:false,car:null};S.advice={box:box};S.before=false;S.view=wanted()[0];
   S.autoP=autoParams(m,box||{x:.12,y:.2,w:.76,h:.62},!S.shot.ext);
   S.params={b:S.autoP.b,s:S.autoP.s,h:S.autoP.h,c:.05};
   $("verdict").hidden=true;$("moves").innerHTML="";$("saveMsg").textContent="";setBusy(null);
@@ -715,8 +719,10 @@ function openReview(src,box,lens,roll){
   $("beforeBtn").setAttribute("aria-pressed","false");$("beforeBtn").textContent="Show original";
   $("claudeBtn").hidden=isVin;$("claudeBtn").textContent=store("key")?"Check with Claude":"Add a Claude key to score this shot";
   $("vinPanel").hidden=!isVin;$("h-res").textContent=S.shot.label;drawViewSeg();
+  $("stageBtn").hidden=!S.shot.ext;$("stageBtn").disabled=false;drawStageBtn();
   if(!$("review").open)$("review").showModal();
   setSliders();render();
+  if(S.shot.ext&&store("stage")==="1")makeCut();
   if(isVin&&S.scanHit){$("vinIn").value=S.scanHit;S.scanHit=null;vinCheck()}
   else if(isVin){
     $("vinIn").value=S.vin||"";vinCheck();
@@ -744,6 +750,7 @@ function layout(shape){
   return {sx:(W-m)/2,sy:(H-m)/2,sw:m,sh:m,fit:false,cut:false};
 }
 function compose(shape,maxSide,toned,exact){
+  if(S.photo.stage&&S.photo.car&&!S.before)return {canvas:scene(exact?maxSide:Math.min(maxSide,1440),toned),lay:layout(shape),map:null};
   var l=layout(shape),a=ASPECT[shape],src=S.photo.src,ow,oh;
   if(!l.fit){ow=l.sw;oh=l.sh}else if(l.sw/l.sh>a){ow=l.sw;oh=ow/a}else{oh=l.sh;ow=oh*a}
   var k=exact?maxSide/Math.max(ow,oh):Math.min(1,maxSide/Math.max(ow,oh)),c=document.createElement("canvas");c.width=Math.max(1,Math.round(ow*k));c.height=Math.max(1,Math.round(oh*k));
@@ -783,7 +790,7 @@ function render(){
   cv.style.width=Math.round(cv.width*f)+"px";cv.style.height=Math.round(cv.height*f)+"px";
   cv.setAttribute("aria-label",S.before?"Your original photo":"Your photo with the lighting fix applied");
   var ov=$("overlay"),box=S.advice&&S.advice.box;ov.setAttribute("viewBox","0 0 "+cv.width+" "+cv.height);
-  if(box&&!S.before){
+  if(box&&!S.before&&m){
     var W=S.photo.src.width,H=S.photo.src.height,x=m.dx+(box.x*W-l.sx)*m.ds,y=m.dy+(box.y*H-l.sy)*m.ds,w=box.w*W*m.ds,h=box.h*H*m.ds,ln=Math.min(w,h)*.14,sw=Math.max(cv.width,cv.height)/260;
     var p=function(a,b,c,d,e,g){return "M"+a.toFixed(1)+" "+b.toFixed(1)+"L"+c.toFixed(1)+" "+d.toFixed(1)+"L"+e.toFixed(1)+" "+g.toFixed(1)};
     ov.innerHTML='<path fill="none" stroke="#F5B21A" stroke-width="'+sw.toFixed(1)+'" stroke-linecap="round" stroke-linejoin="round" d="'+p(x,y+ln,x,y,x+ln,y)+p(x+w-ln,y,x+w,y,x+w,y+ln)+p(x+w,y+h-ln,x+w,y+h,x+w-ln,y+h)+p(x+ln,y+h,x,y+h,x,y+h-ln)+'"/>';
@@ -803,6 +810,7 @@ function drawLightNote(){
   var t=parts.length?"<b>Light fix:</b> "+parts.join(", ")+".":"<b>Exposure looks right.</b> No fix was needed.";
   if(m.clipHi>12)t+=" Part of the frame is blown out white, which editing cannot bring back.";
   var l=S.photo.lay,nm=S.view==="square"?"square":"9:16";
+  if(S.photo.stage&&S.photo.car&&!S.before)t+=" On the turntable.";
   var tilt=Math.abs(S.photo.roll||0);
   if(tilt>=.2&&tilt<=12)t+=" Straightened by "+tilt.toFixed(1)+"°.";
   var bad=wanted().filter(function(k){return layout(k).cut}).map(function(k){return k==="square"?"square":"9:16"});
@@ -814,6 +822,130 @@ function drawLightNote(){
 }
 function setBusy(t){$("busy").hidden=!t;if(t)$("busyText").textContent=t}
 function showMsg(t){$("coachMsg").hidden=!t;$("coachMsg").textContent=t||""}
+
+/* ---------- turntable: cut the car out and stand it on a showroom turntable ---------- */
+function loadBg(){
+  return L.bgP||(L.bgP=new Promise(function(res,rej){
+    var sc=document.createElement("script");sc.type="module";sc.src="bg/bundle.js?v=1";
+    sc.onload=function(){window.__removeBg?res(window.__removeBg):rej(new Error("load"))};sc.onerror=function(){L.bgP=null;rej(new Error("load"))};document.head.appendChild(sc);
+  }));
+}
+function drawStageBtn(){
+  var b=$("stageBtn"),on=!!(S.photo&&S.photo.stage);b.setAttribute("aria-pressed",String(on));
+  if(!b.dataset.busy)b.textContent=on?"Turntable on. Tap for the plain photo":"Put on turntable";
+}
+function stageMsg(t){var b=$("stageBtn");if(t){b.dataset.busy="1";b.textContent=t}else{delete b.dataset.busy;drawStageBtn()}}
+/* keep only the biggest connected blob of the cut-out, so stray scraps of background are dropped */
+function keepLargest(id){
+  var W=id.width,H=id.height,d=id.data,g=160,gw=g,gh=Math.max(1,Math.round(g*H/W)),m=new Uint8Array(gw*gh),lab=new Int32Array(gw*gh),x,y,i;
+  for(y=0;y<gh;y++)for(x=0;x<gw;x++){var sx=Math.min(W-1,Math.floor((x+.5)*W/gw)),sy=Math.min(H-1,Math.floor((y+.5)*H/gh));m[y*gw+x]=d[(sy*W+sx)*4+3]>60?1:0}
+  var best=0,bestN=0,cur=0,stack=[];
+  for(i=0;i<m.length;i++){
+    if(!m[i]||lab[i])continue;cur++;var n=0;stack.push(i);lab[i]=cur;
+    while(stack.length){var q=stack.pop();n++;var qx=q%gw,qy=(q-qx)/gw;
+      if(qx>0&&m[q-1]&&!lab[q-1]){lab[q-1]=cur;stack.push(q-1)}if(qx<gw-1&&m[q+1]&&!lab[q+1]){lab[q+1]=cur;stack.push(q+1)}
+      if(qy>0&&m[q-gw]&&!lab[q-gw]){lab[q-gw]=cur;stack.push(q-gw)}if(qy<gh-1&&m[q+gw]&&!lab[q+gw]){lab[q+gw]=cur;stack.push(q+gw)}}
+    if(n>bestN){bestN=n;best=cur}
+  }
+  var x0=W,y0=H,x1=0,y1=0;
+  for(y=0;y<H;y++){var gy=Math.min(gh-1,Math.floor(y*gh/H));for(x=0;x<W;x++){
+    var gx=Math.min(gw-1,Math.floor(x*gw/W)),ok=false,dx,dy;
+    for(dy=-1;dy<=1&&!ok;dy++)for(dx=-1;dx<=1;dx++){var cx=gx+dx,cy=gy+dy;if(cx>=0&&cy>=0&&cx<gw&&cy<gh&&lab[cy*gw+cx]===best){ok=true;break}}
+    var o=(y*W+x)*4+3;if(!ok)d[o]=0;else if(d[o]>40){if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y}
+  }}
+  return {x:x0,y:y0,w:x1-x0+1,h:y1-y0+1,share:bestN/m.length};
+}
+function makeCut(){
+  if(!S.photo||!S.photo.shot.ext||$("stageBtn").dataset.busy)return;
+  if(S.photo.car){S.photo.stage=true;drawStageBtn();render();return}
+  var gen=S.gen,ph=S.photo;$("keepBtn").disabled=$("saveBtn").disabled=true;stageMsg("Loading the cut-out tool");
+  var base=compose("square",1440,false,true).canvas;
+  loadBg().then(function(removeBg){
+    return canvasBlob(base,.95).then(function(b){
+      return removeBg(b,{publicPath:new URL("bg/data/",location.href).href,model:"small",output:{format:"image/png",quality:1},
+        progress:function(key,cur,tot){if(gen===S.gen&&tot)stageMsg(/fetch/.test(key)?"Downloading the cut-out model "+Math.round(cur/tot*100)+"%":"Cutting out the car")}});
+    });
+  }).then(function(png){stageMsg("Cutting out the car");return loadBitmap(png)}).then(function(bm){
+    if(gen!==S.gen||S.photo!==ph)return;
+    var c=document.createElement("canvas");c.width=bm.width;c.height=bm.height;var x=c.getContext("2d",{willReadFrequently:true});x.drawImage(bm,0,0);if(bm.close)bm.close();
+    var id=x.getImageData(0,0,c.width,c.height),bb=keepLargest(id);x.putImageData(id,0,0);
+    if(bb.w<c.width*.2||bb.share<.04)throw new Error("nocar");
+    var car=document.createElement("canvas");car.width=bb.w;car.height=bb.h;car.getContext("2d",{willReadFrequently:true}).drawImage(c,bb.x,bb.y,bb.w,bb.h,0,0,bb.w,bb.h);
+    ph.car=car;ph.stage=true;store("stage","1");stageMsg(null);render();
+  }).catch(function(e){
+    if(gen!==S.gen)return;stageMsg(null);$("keepBtn").disabled=$("saveBtn").disabled=false;
+    $("saveMsg").textContent=e&&e.message==="nocar"?"The cut-out could not find the car in this photo. The plain photo is kept.":"The cut-out tool could not load. Check your connection and try again.";
+  });
+}
+/* where the car meets the ground: the bottom edge of the cut-out in each column, and the straight line
+   across the tyres' lowest points (the hull under that edge). Values are fractions of the car's height. */
+function groundLine(car){
+  var n=160,t=document.createElement("canvas");t.width=n;t.height=Math.max(8,Math.round(n*car.height/car.width));
+  var c=t.getContext("2d",{willReadFrequently:true});c.drawImage(car,0,0,n,t.height);var d=c.getImageData(0,0,n,t.height).data,h=t.height,yb=new Float32Array(n),x,y,pts=[];
+  for(x=0;x<n;x++){yb[x]=-1;for(y=h-1;y>=0;y--)if(d[(y*n+x)*4+3]>110){yb[x]=(y+1)/h;break}if(yb[x]>=0)pts.push([x,yb[x]])}
+  var hull=[];
+  pts.forEach(function(p){while(hull.length>=2){var a=hull[hull.length-2],b=hull[hull.length-1];if((b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0])>=0)hull.pop();else break}hull.push(p)});
+  var gl=new Float32Array(n),i=0;
+  for(x=0;x<n;x++){if(!hull.length){gl[x]=1;continue}while(i<hull.length-2&&x>hull[i+1][0])i++;var a=hull[Math.min(i,hull.length-1)],b=hull[Math.min(i+1,hull.length-1)];
+    gl[x]=x<=hull[0][0]?hull[0][1]:x>=hull[hull.length-1][0]?hull[hull.length-1][1]:a[1]+(b[1]-a[1])*(x-a[0])/Math.max(1,b[0]-a[0])}
+  var lo=1,hi=0;hull.forEach(function(p){if(p[1]<lo)lo=p[1];if(p[1]>hi)hi=p[1]});
+  return {n:n,yb:yb,gl:gl,lo:lo,hi:hi};
+}
+/* shadow under the car: fills the gap between the body and the ground line and spills a little below it,
+   so every tyre touches something dark and nothing hovers */
+function groundShadow(ctx,G,px,py,cw,ch,thick,blur,alpha){
+  var W=G.n,k=W/cw,H=Math.max(8,Math.round(ch*k)),r=Math.max(1,Math.round(blur*k)),pad=r*3+2,t=document.createElement("canvas");
+  t.width=W+pad*2;t.height=H+pad*2+Math.ceil(thick*k);var c=t.getContext("2d",{willReadFrequently:true}),id=c.createImageData(t.width,t.height),d=id.data,w=t.width,h=t.height,a=new Float32Array(w*h),b=new Float32Array(w*h),x,y,p,i;
+  for(x=0;x<W;x++){if(G.yb[x]<0)continue;var y0=Math.floor(Math.min(G.yb[x],G.gl[x])*H)-1,y1=Math.ceil(G.gl[x]*H+thick*k);for(y=y0;y<=y1;y++)if(y>=0&&y+pad<h)a[(y+pad)*w+x+pad]=255}
+  for(p=0;p<3;p++){
+    for(y=0;y<h;y++){var acc=0;for(x=-r;x<=r;x++)acc+=a[y*w+Math.min(w-1,Math.max(0,x))];for(x=0;x<w;x++){b[y*w+x]=acc/(2*r+1);acc+=a[y*w+Math.min(w-1,x+r+1)]-a[y*w+Math.max(0,x-r)]}}
+    for(x=0;x<w;x++){var ac2=0;for(y=-r;y<=r;y++)ac2+=b[Math.min(h-1,Math.max(0,y))*w+x];for(y=0;y<h;y++){a[y*w+x]=ac2/(2*r+1);ac2+=b[Math.min(h-1,y+r+1)*w+x]-b[Math.max(0,y-r)*w+x]}}
+  }
+  for(i=0;i<a.length;i++)d[i*4+3]=a[i];
+  c.putImageData(id,0,0);
+  ctx.save();ctx.globalAlpha=alpha;ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";ctx.drawImage(t,px-pad/k,py-pad/k,t.width/k,t.height/k);ctx.restore();
+}
+function scene(Sz,toned){
+  var ph=S.photo,src=ph.car,c=document.createElement("canvas");c.width=c.height=Sz;var x=c.getContext("2d",{willReadFrequently:true});
+  var banner=(store("banner")||"").trim(),bh=banner?Math.round(Sz*.1):0;
+  /* the car, light-fixed */
+  var k=Math.min(Sz*Math.min(.84,(ph.shot.fill||.86)-.1)/src.width,Sz*.54/src.height),cw=Math.round(src.width*k),ch=Math.round(src.height*k);
+  var car=document.createElement("canvas");car.width=cw;car.height=ch;var cx2=car.getContext("2d",{willReadFrequently:true});cx2.drawImage(src,0,0,cw,ch);if(toned)tone(cx2,cw,ch,S.params);
+  var G=ph.ground||(ph.ground=groundLine(src));
+  var mx=Sz/2,ground=Math.round(Sz*(banner?.73:.77)),px=Math.round(mx-cw/2),py=ground-ch,horizon=Sz*.55;
+  var gTop=py+G.lo*ch,gBot=py+G.hi*ch; /* the tyres' contact line runs from gTop to gBot down the picture */
+  /* wall and floor */
+  var g=x.createRadialGradient(mx,Sz*.3,0,mx,Sz*.3,Sz*.78);g.addColorStop(0,"#6f7d90");g.addColorStop(.55,"#353d49");g.addColorStop(1,"#14181e");x.fillStyle=g;x.fillRect(0,0,Sz,Sz);
+  g=x.createLinearGradient(0,horizon,0,Sz);g.addColorStop(0,"#2c323b");g.addColorStop(1,"#0e1115");x.fillStyle=g;x.fillRect(0,horizon,Sz,Sz-horizon);
+  g=x.createRadialGradient(mx,horizon,0,mx,horizon,Sz*.6);g.addColorStop(0,"rgba(120,134,155,.38)");g.addColorStop(1,"rgba(120,134,155,0)");x.fillStyle=g;x.fillRect(0,horizon,Sz,Sz-horizon);
+  /* turntable, sized and placed so the whole contact line lies on it */
+  var rx=Math.min(Sz*.485,Math.max(cw*.62,Sz*.4)),ry=Math.max(rx*.25,(gBot-gTop)*.5+rx*.13),cy=(gTop+gBot)/2-ry*.12,th=Sz*.02;
+  x.fillStyle="#07090c";x.beginPath();x.ellipse(mx,cy+th,rx,ry,0,0,Math.PI*2);x.fill();x.fillRect(mx-rx,cy,rx*2,th);
+  x.fillStyle="#565f6e";x.beginPath();x.ellipse(mx,cy,rx,ry,0,0,Math.PI*2);x.fill();
+  x.save();x.beginPath();x.ellipse(mx,cy,rx-Sz*.006,ry-Sz*.003,0,0,Math.PI*2);x.clip();
+  x.fillStyle="#2b3038";x.fillRect(mx-rx,cy-ry,rx*2,ry*2);
+  g=x.createRadialGradient(mx,cy-ry*.5,0,mx,cy-ry*.5,rx*.8);g.addColorStop(0,"rgba(150,165,190,.34)");g.addColorStop(1,"rgba(150,165,190,0)");x.fillStyle=g;x.fillRect(mx-rx,cy-ry,rx*2,ry*2);
+  /* shadows on the disc: broad and soft under the whole car, then dark and tight along the contact line */
+  g=x.createRadialGradient(0,0,0,0,0,1);g.addColorStop(0,"rgba(0,0,0,.5)");g.addColorStop(.65,"rgba(0,0,0,.26)");g.addColorStop(1,"rgba(0,0,0,0)");
+  x.save();x.translate(mx,(gTop+gBot)/2);x.scale(cw*.6,Math.max(ch*.12,(gBot-gTop)*.9));x.fillStyle=g;x.beginPath();x.arc(0,0,1,0,Math.PI*2);x.fill();x.restore();
+  groundShadow(x,G,px,py,cw,ch,ch*.05,Sz*.014,.72);
+  groundShadow(x,G,px,py,cw,ch,ch*.012,Sz*.0035,.95);
+  x.restore();
+  x.strokeStyle="rgba(150,160,178,.9)";x.lineWidth=Math.max(1.5,Sz*.0028);x.beginPath();x.ellipse(mx,cy,rx,ry,0,0,Math.PI*2);x.stroke();
+  x.drawImage(car,px,py);
+  if(banner){
+    x.fillStyle="#F5B21A";x.fillRect(0,Sz-bh,Sz,bh);x.fillStyle="#1B1400";x.textAlign="center";x.textBaseline="middle";
+    var fs=bh*.5;x.font="800 "+fs+"px -apple-system,system-ui,'Segoe UI',Roboto,Arial,sans-serif";
+    var tw=x.measureText(banner.toUpperCase()).width;if(tw>Sz*.92){fs*=Sz*.92/tw;x.font="800 "+fs+"px -apple-system,system-ui,'Segoe UI',Roboto,Arial,sans-serif"}
+    x.fillText(banner.toUpperCase(),Sz/2,Sz-bh/2+fs*.04);
+  }
+  return c;
+}
+$("stageBtn").onclick=function(){
+  if(!S.photo||this.dataset.busy)return;
+  if(S.photo.stage){S.photo.stage=false;store("stage","0");drawStageBtn();render();return}
+  makeCut();
+};
 
 /* ---------- Claude check (optional, user's own key) ---------- */
 function headers(key){return {"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"}}
@@ -1055,6 +1187,7 @@ $("refInput").addEventListener("change",function(){
 /* ---------- settings ---------- */
 function openSettings(){
   $("camInfo").textContent=video.videoWidth?"Camera feed: "+video.videoWidth+" × "+video.videoHeight+" pixels, phone turned "+L.q+"°. Photos save at "+(Math.min(video.videoWidth,video.videoHeight)>=2000?1440:1080)+" × "+(Math.min(video.videoWidth,video.videoHeight)>=2000?1440:1080)+".":"";
+  $("bannerIn").value=store("banner")||"";
   $("keyIn").value=store("key")||"";$("modelIn").value=modelName();$("keyMsg").textContent="";drawRefs();
   if(!$("settings").open)$("settings").showModal();
 }
@@ -1070,6 +1203,7 @@ $("keySave").onclick=function(){
     else msg.textContent="Key works.";
   }).catch(function(){msg.textContent="The key was saved, but the test could not reach Anthropic."});
 };
+$("bannerIn").addEventListener("input",function(){store("banner",this.value.trim()||null);if(S.photo&&$("review").open)schedule()});
 $("keyDel").onclick=function(){store("key",null);$("keyIn").value="";$("keyMsg").textContent="Key removed from this browser."};
 
 /* ---------- buttons ---------- */
@@ -1097,7 +1231,7 @@ $("holdClose").onclick=function(){$("holdDlg").close()};
 $("wipeBtn").onclick=function(){
   S.gen++;if(S.ctl)S.ctl.abort();S.refs.forEach(function(r){URL.revokeObjectURL(r.url)});
   S.refs=[];S.refActive=-1;S.photo=null;S.advice=null;S.saved={};S.kept={};S.count=0;dbClear();
-  ["key","model","shape","auto"].forEach(function(k){store(k,null)});S.shape="square";S.vin=null;S.vinOk=false;S.vinInfo="";S.auto=true;$("autoBtn").setAttribute("aria-pressed","true");
+  ["key","model","shape","auto","banner","stage"].forEach(function(k){store(k,null)});S.shape="square";S.vin=null;S.vinOk=false;S.vinInfo="";S.auto=true;$("autoBtn").setAttribute("aria-pressed","true");
   var cv=$("view");cv.width=cv.height=1;drawRefs();drawSetup();$("legal").close();
 };
 window.addEventListener("resize",function(){if(S.photo&&$("review").open)schedule()});
